@@ -28,8 +28,14 @@
   out more slowly than they brighten. Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
 - Spawn twinkles individually. Keep each star's randomized saturation stable.
-- Sweep title/number accents using the shared spatial phase and complementary
+- Keep star hue offsets stable and bounded around one center, concentrated with
+  a Gaussian-like distribution rather than independently cycling palette hues.
+- Sweep title/number/hint accents using the shared spatial phase and complementary
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
+- Status backgrounds interpolate to the settled hint color during each sweep.
+- Compose foreground repairs from final animated cells. Do not paint original
+  title colors underneath an overlay or clear/repaint everything on every tick.
+  Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Disabled options must be skipped in both directions and refused by the numeric
   fallback. A fully disabled list must terminate without looping forever.

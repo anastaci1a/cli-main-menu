@@ -48,7 +48,7 @@ function ez_menu_banner() {
   printf '\n'
 }
 
-function ez_menu_status() {
+function ez_menu_status_text() {
   local width=${COLUMNS:-80}
   local clock_text host_text=${HOSTNAME%%.*} path_text=$PWD status_text path_width
   (( width < 1 )) && width=1
@@ -67,7 +67,11 @@ function ez_menu_status() {
   else
     status_text=" $clock_text"
   fi
-  printf '\r\033[2K%s%s%-*s%s' "$C_STATUS_BG" "$C_WHITE" "$width" "${status_text:0:width}" "$C_RESET"
+  printf '%-*s' "$width" "${status_text:0:width}"
+}
+
+function ez_menu_status() {
+  printf '\r%s%s%s%s' "$C_STATUS_BG" "$C_WHITE" "$(ez_menu_status_text)" "$C_RESET"
 }
 
 function ez_menu_clip() {
@@ -174,7 +178,7 @@ function ez_menu_draw() {
   local selected=$1 first=$2 visible=$3 index label pointer weight number_weight label_color label_padding
   local number_color note note_text
   local label_width number number_width option_block_width indent right_width hint hint_width=0 page
-  local left_stars right_stars
+  local left_stars right_stars screen_row
   local -a labels hints
   shift 3
   labels=("$@")
@@ -196,6 +200,15 @@ function ez_menu_draw() {
     elif (( index == selected )); then
       pointer='>' weight=$C_BOLD number_weight=$C_BOLD label_color=$C_WHITE
     fi
+    if (( ${ez_stars_animated:-0} )); then
+      screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
+      printf '\r'
+      ez_stars_render_span "$screen_row" 0 "$((indent + number_width + 1))"
+      printf ' %s%s%s%s%s%s%s' "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding"
+      ez_stars_render_span "$screen_row" "$((indent + option_block_width))" "$right_width"
+      printf '\r\n'
+      continue
+    fi
     left_stars=${menu_star_left[index-first]-}
     right_stars=${menu_star_right[index-first]-}
     [[ -n $left_stars ]] || printf -v left_stars '%*s' "$indent" ''
@@ -204,7 +217,11 @@ function ez_menu_draw() {
       "$left_stars" "$number_color" "$pointer" "$number_weight" "$number_width" "$number" "$C_RESET" \
       "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding" "$right_stars"
   done
-  printf '\r\033[2K'
+  if (( ${ez_stars_animated:-0} )); then
+    printf '\r%*s\r' "${COLUMNS:-80}" ''
+  else
+    printf '\r\033[2K'
+  fi
   if (( visible < ${#labels[@]} )); then
     printf -v page '%d-%d of %d' "$((first + 1))" "$((first + visible))" "${#labels[@]}"
     indent=$(( (${COLUMNS:-80} - ${#page}) / 2 ))
@@ -218,7 +235,15 @@ function ez_menu_draw() {
   done
   indent=$(( (${COLUMNS:-80} - hint_width) / 2 ))
   (( indent < 0 )) && indent=0
+  screen_row=$(( ${#fitted_rows[@]} + visible + 4 ))
   for hint in "${hints[@]}"; do
-    printf '\r\033[2K%*s%s%s%s\n' "$indent" '' "$C_STAR_LAVENDER" "$hint" "$C_RESET"
+    if (( ${ez_stars_animated:-0} )); then
+      printf '\r'
+      ez_stars_render_span "$screen_row" 0 "$COLUMNS"
+      printf '\r\n'
+      screen_row=$((screen_row + 1))
+    else
+      printf '\r\033[2K%*s%s%s%s\n' "$indent" '' "$C_STAR_LAVENDER" "$hint" "$C_RESET"
+    fi
   done
 }

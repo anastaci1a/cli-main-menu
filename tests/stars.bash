@@ -6,9 +6,27 @@ source -- "$cli_dir/init.bash"
 declare -a stars_cells stars_fade stars_hue stars_sat stars_value
 declare -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
 declare -A stars_text_char stars_text_style stars_text_fade stars_text_seen
+declare -A stars_hue_offset stars_cell_render stars_text_palette
+declare -a hint_rows=()
 EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
 EZ_MENU_STAR_SATURATION_MAX=800 EZ_MENU_SWEEP_ACCENT_OFFSET=180
+EZ_MENU_STAR_HUE_SPREAD=60
 ez_stars_init
+
+# A repeatable sample must cluster near its center, not uniformly at the edges.
+RANDOM=7129
+inner=0 outer=0 total=0
+for ((sample = 0; sample < 3000; sample++)); do
+  ez_stars_pick_hue 0
+  offset=${stars_hue_offset[0]}
+  (( offset >= -30 && offset <= 30 ))
+  total=$((total + offset))
+  if (( offset >= -10 && offset <= 10 )); then inner=$((inner + 1)); fi
+  if (( offset <= -20 || offset >= 20 )); then outer=$((outer + 1)); fi
+done
+(( inner > 4 * outer && total > -6000 && total < 6000 ))
+[[ ${stars_hue[0]} == "${stars_hue[1]}" && ${stars_hue[1]} == "${stars_hue[2]}" ]]
+printf 'PASS bounded Gaussian-like hue distribution around one palette center\n'
 
 # Masks adapt to title width, option width/count, and the viewport.
 for COLUMNS in 5 36 80 160; do
@@ -35,11 +53,11 @@ done
 printf 'PASS scalable text masks, row brightness, and randomized saturation bounds\n'
 
 # Three fixed stars span the sweep's diagonal; suppress random births.
-COLUMNS=80 stars_top=3 stars_bottom=16
+COLUMNS=80 stars_top=3 stars_bottom=16 stars_sweep_bottom=16
 stars_cells=(160 239 1279) stars_fade=([3]=100 [16]=5)
 stars_char=([160]='.' [239]='+' [1279]='*')
 stars_palette=([160]=0 [239]=0 [1279]=0) stars_birth=() stars_seen=()
-stars_saturation=()
+stars_saturation=() stars_hue_offset=()
 stars_next=999999
 ez_stars_tick 3999
 original=${stars_seen[160]}
@@ -102,9 +120,11 @@ for ((instant = 100; instant <= 170; instant += 10)); do
   (( stars_next > instant && stars_next <= instant + 500 ))
 done
 saved_saturation=$(declare -p stars_saturation)
+saved_hues=$(declare -p stars_hue_offset)
 stars_next=999999
 ez_stars_tick 200
 [[ $(declare -p stars_saturation) == "$saved_saturation" ]]
+[[ $(declare -p stars_hue_offset) == "$saved_hues" ]]
 printf 'PASS single births, sub-half-second delays, and stable per-star saturation\n'
 
 # Title and two-digit numbers sweep with the palette's complementary hue.
@@ -137,6 +157,45 @@ EZ_MENU_TITLE='A compact title'
 ez_stars_text_layout 6 15 2 1 9 11 2
 [[ ${#stars_text_char[@]} -gt 8 ]]
 printf 'PASS complementary title/numbers, shared sweep, scrolling, and disabled/selected styles\n'
+
+# Wrapped hints extend the spatial sweep and retain a dimmer, softer palette.
+for COLUMNS in 20 36 80; do
+  LINES=30 visible=3 option_left=3 option_right=3 title_rows=('AB')
+  mapfile -t hint_rows < <(ez_menu_hint_lines)
+  ez_stars_layout 6 1 2 2
+  ez_stars_text_layout 6 2 2 0 0 0 1
+  [[ $stars_sweep_bottom == $((6 + visible + 3 + ${#hint_rows[@]})) ]]
+  hint_cell=''
+  for cell in "${!stars_text_char[@]}"; do
+    if [[ ${stars_text_palette[$cell]} == 4 ]]; then
+      hint_cell=$cell
+      [[ ${stars_text_style[$cell]} == 0 && ${stars_text_fade[$cell]} == 55 ]]
+    fi
+  done
+  [[ -n $hint_cell ]]
+  row=$((hint_cell / COLUMNS + 1)) col=$((hint_cell % COLUMNS))
+  arrival=$((700 * (col * 1000 / (COLUMNS - 1) + (row - stars_top) * 1000 / (stars_sweep_bottom - stars_top)) / 2000))
+  stars_next=999999
+  ez_stars_tick "$((4000 + arrival + 60))"
+  [[ ${stars_text_seen[$hint_cell]} == '140;140;140:0:'* ]]
+done
+[[ ${stars_hue[4]} == "${stars_hue[3]}" && ${stars_sat[4]} -lt ${stars_sat[3]} ]]
+ez_stars_color 4 0 0 55 1000
+from_r=$stars_r from_g=$stars_g from_b=$stars_b
+ez_stars_color 4 1 0 55 1000
+to_r=$stars_r to_g=$stars_g to_b=$stars_b
+ez_stars_bar_color 4000
+[[ $stars_r == "$from_r" && $stars_g == "$from_g" && $stars_b == "$from_b" ]]
+ez_stars_bar_color 4500
+(( stars_r == from_r + (to_r - from_r) / 2 ))
+(( stars_g == from_g + (to_g - from_g) / 2 ))
+(( stars_b == from_b + (to_b - from_b) / 2 ))
+ez_stars_bar_color 5000
+[[ $stars_r == "$to_r" && $stars_g == "$to_g" && $stars_b == "$to_b" ]]
+settled_bg=$stars_bar_bg
+ez_stars_bar_color 7000
+[[ $stars_bar_bg == "$settled_bg" ]]
+printf 'PASS responsive hint sweep and linear status-bar color endpoints/midpoint\n'
 
 # Invalid settings cannot create division by zero or overlapping sweeps.
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1

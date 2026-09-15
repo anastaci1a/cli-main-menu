@@ -5,6 +5,9 @@ function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index
   local disabled_indices='' enabled_count=0 direction attempts label_color weight number_color note note_text
   local read_status last_tick=-1 redraw=1 layout_dirty=1
+  local full_redraw=1 option_frame=0 text_cache_key='' new_text_key
+  local last_repair=$SECONDS
+  local status_line='' status_output='' status_seen='' status_token elapsed
   local first=0 visible available_rows frame row frame_banner
   local term_size term_lines term_columns hint_count main_banner=0
   local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
@@ -14,11 +17,12 @@ function ez_menu_choose() (
   local ez_stars_animated=0 input_timeout=1 actual_title_width
   local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
   local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
-  local stars_sat_max stars_accent_offset stars_white stars_color_cycle
+  local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
   local -a stars_cells stars_fade stars_hue stars_sat stars_value
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
+  local -A stars_hue_offset stars_cell_render stars_text_palette
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
@@ -85,7 +89,7 @@ function ez_menu_choose() (
   trap 'printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
-  trap 'redraw=1; layout_dirty=1' WINCH CONT
+  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH CONT
   printf '\033[?1049h\033[?1004h\033[?25l\033[2J\033[H' >&2
   mapfile -t banner_rows <<< "$banner"
   (( ${#banner_rows[@]} > 3 )) && main_banner=1
@@ -97,10 +101,13 @@ function ez_menu_choose() (
   title_width=${#title_rows[0]}
   (( selected >= count )) && selected=0
   while :; do
-    frame=''
+    frame='' status_output='' option_frame=0
     if (( ez_stars_animated )); then
       ez_stars_now
       stars_frame_started=$stars_now
+      # Keep the Termux recovery fallback for missing focus/continue events,
+      # without coupling every clock update to a full-screen repaint.
+      (( SECONDS - last_repair >= 5 )) && full_redraw=1
     fi
     if (( redraw || SECONDS != last_tick )); then
       # Read the real terminal size: phone keyboards/app switching can change it.
@@ -108,7 +115,7 @@ function ez_menu_choose() (
       read -r term_lines term_columns <<< "$term_size"
       if [[ $term_lines =~ ^[1-9][0-9]*$ && $term_columns =~ ^[1-9][0-9]*$ ]]; then
         if (( LINES != term_lines || COLUMNS != term_columns )); then
-          LINES=$term_lines COLUMNS=$term_columns layout_dirty=1
+          LINES=$term_lines COLUMNS=$term_columns layout_dirty=1 full_redraw=1
         fi
       fi
       if (( layout_dirty )); then
@@ -170,35 +177,56 @@ function ez_menu_choose() (
       (( selected < first )) && first=$selected
       (( selected >= first + visible )) && first=$((selected - visible + 1))
       if (( ez_stars_animated )); then
-        ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$number_width"
+        new_text_key="$new_star_key:$first:$selected"
+        if [[ $new_text_key != "$text_cache_key" ]]; then
+          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$number_width"
+          text_cache_key=$new_text_key
+        fi
+        status_line=$(ez_menu_status_text)
+        (( redraw )) && option_frame=1
+      else
+        # Static/submenu rendering keeps the original terminal fallback.
+        frame=$(
+          ez_menu_status
+          printf '\n'
+          for row in "${fitted_rows[@]}"; do printf '\r\033[2K%s\r\n' "$row"; done
+          printf '\r\033[2K\n'
+          ez_menu_draw "$selected" "$first" "$visible" "$@"
+          printf '\r\033[J'
+        )
       fi
-      # Repaint from home in one write. No relative cursor offsets can drift.
-      # The once-per-second repaint also repairs terminals without focus events.
-      frame=$(
-        ez_menu_status
-        printf '\n'
-        for row in "${fitted_rows[@]}"; do
-          # CR before LF cancels pending autowrap after a full-width star row.
-          printf '\r\033[2K%s\r\n' "$row"
-        done
-        printf '\r\033[2K\n'
-        ez_menu_draw "$selected" "$first" "$visible" "$@"
-        printf '\r\033[J'
-      )
-      # The foreground redraw erased the overlay; restore it from current state.
-      stars_seen=()
       last_tick=$SECONDS
       redraw=0
     fi
     if (( ez_stars_animated )); then
       ez_stars_now
-      ez_stars_tick "$((stars_now - stars_origin))"
-      if [[ -n $frame ]]; then
-        # Write foreground and restored stars together, avoiding a blank flash.
-        printf '\033[H%s%s' "$frame" "$stars_output" >&2
-      elif [[ -n $stars_output ]]; then
-        printf '%s' "$stars_output" >&2
+      elapsed=$((stars_now - stars_origin))
+      ez_stars_tick "$elapsed"
+      ez_stars_bar_color "$elapsed"
+      status_token="$stars_bar_bg:$status_line"
+      if [[ $status_token != "$status_seen" ]] || (( full_redraw )); then
+        printf -v status_output '\033[1;1H%s%s%s%s' "$stars_bar_bg" "$C_WHITE" "$status_line" "$C_RESET"
+        status_seen=$status_token
       fi
+      if (( full_redraw )); then
+        # Paint final colors directly: no blank or original-color underlay.
+        frame=$(
+          printf '\033[H%s\r\n' "$status_output"
+          for ((row = 2; row <= ${#fitted_rows[@]} + 2; row++)); do
+            ez_stars_render_span "$row" 0 "$COLUMNS"
+            printf '\r\n'
+          done
+          ez_menu_draw "$selected" "$first" "$visible" "$@"
+          printf '\r\033[J'
+        )
+        status_output='' stars_output='' full_redraw=0 last_repair=$SECONDS
+      elif (( option_frame )); then
+        frame=$(
+          printf '\033[%d;1H' "$(( ${#fitted_rows[@]} + 3 ))"
+          ez_menu_draw "$selected" "$first" "$visible" "$@"
+        )
+      fi
+      printf '%s%s%s' "$status_output" "$frame" "$stars_output" >&2
       ez_stars_now
       stars_delay=$((50 - (stars_now - stars_frame_started)))
       (( stars_delay < 1 )) && stars_delay=1
@@ -215,7 +243,7 @@ function ez_menu_choose() (
     fi
     case $key in
       '') printf '%d' "$selected"; return ;;
-      $'\014') redraw=1; layout_dirty=1; continue ;;
+      $'\014') redraw=1; layout_dirty=1; full_redraw=1; continue ;;
       $'\033')
         # Accept both normal (CSI) and application-mode (SS3) arrow keys.
         IFS= read -rsn1 -t 0.15 next || return 130
@@ -228,7 +256,7 @@ function ez_menu_choose() (
         case $sequence in
           *A) direction=-1 ;;
           *B) direction=1 ;;
-          I) redraw=1; layout_dirty=1; continue ;;
+          I) redraw=1; layout_dirty=1; full_redraw=1; continue ;;
           O) continue ;;
           *) continue ;;
         esac

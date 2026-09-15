@@ -46,6 +46,7 @@ sub expect {
   die "FAIL $label\n$buf\n" unless $buf =~ $pattern;
 }
 sub send_keys { syswrite($pty,$_[0]); pump(0.15); }
+sub plain { my $text=shift; $text =~ s/\e\[[0-9;?]*[A-Za-z]//g; return $text; }
 sub finish {
   expect(qr/TEST_DONE/,'finished');
   waitpid($pid,0);
@@ -56,13 +57,19 @@ start_case('chooser');
 expect(qr/Up\/Down: move/,'initial menu');
 die 'selected option is not bold' unless $buf =~ /\e\[1mOne/;
 my @before=($buf =~ /(\d\d:\d\d:\d\d)/g);
+my $idle_marker=length $buf;
 pump(2.2);
+my $idle_output=substr($buf,$idle_marker);
+die 'clock tick repainted or cleared the whole menu' if $idle_output =~ /\e\[H|\e\[2[JK]/;
+die 'animated foreground painted the original pink underlay' if $buf =~ /\e\[38;5;177m/;
 my @after=($buf =~ /(\d\d:\d\d:\d\d)/g);
 die 'clock did not advance' unless @after>1 && $after[-1] ne $before[0];
 my $animation_marker=length $buf;
 # Include the first sweep; updates must arrive between full clock redraws.
 pump(3.0);
 my $animation_output=substr($buf,$animation_marker);
+die 'missing-focus recovery repaint was lost' unless $animation_output =~ /\e\[H/;
+die 'recovery repaint restored the original title color' if $animation_output =~ /\e\[38;5;177m/;
 my @overlay_frames=split /\e\[0m/, $animation_output;
 my $moving_frames=grep {/\e\[\d+;\d+H\e\[38;2;/} @overlay_frames;
 die 'star animation did not produce intermediate frames' unless $moving_frames > 10;
@@ -73,6 +80,7 @@ expect(qr/SELECTED=1 STATUS=0/,'enter chooses second');
 die 'cursor not restored' unless $buf =~ /\e\[\?25h/;
 finish();
 print "PASS arrow selection, bold styling, live seconds, cursor cleanup\n";
+print "PASS clock updates avoid full redraws and original-color underlays\n";
 start_case('static');
 expect(qr/Up\/Down: move/,'static fallback menu');
 die 'static mode emitted an animation overlay' if $buf =~ /\e\[\d+;\d+H\e\[38;2;/;
@@ -164,14 +172,14 @@ $marker=length $buf;
 $pty->set_winsize(12,36,0,0);
 pump(1.3);
 my $small_output=substr($buf,$marker);
-die 'resize did not use compact title' unless $small_output =~ /SATELLITE/;
+die 'resize did not use compact title' unless plain($small_output) =~ /SATELLITE/;
 die 'resize lost selection' unless $small_output =~ /\e\[1mTwo/;
-die 'narrow screen still contains block title' if $small_output =~ /#####  ###/;
+die 'narrow screen still contains block title' if plain($small_output) =~ /#####  ###/;
 $marker=length $buf;
 $pty->set_winsize(24,80,0,0);
 pump(1.3);
 my $large_output=substr($buf,$marker);
-die 'enlarging did not restore block title' unless $large_output =~ /#####  ###/;
+die 'enlarging did not restore block title' unless plain($large_output) =~ /#####  ###/;
 die 'enlarging lost selection' unless $large_output =~ /\e\[1mTwo/;
 die 'relative vertical cursor movement remains' if $buf =~ /\e\[\d+[AB]/;
 send_keys("\n");

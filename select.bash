@@ -23,10 +23,11 @@ function ez_menu_choose() (
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
   local stars_density_max
+  local stars_horizon_delay stars_horizon_next
   local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
-  local -A stars_text_flash
+  local -A stars_text_flash stars_occluded
   local -A stars_hue_offset stars_cell_render stars_text_palette
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
@@ -172,9 +173,8 @@ function ez_menu_choose() (
             (( right_gutter > option_right )) && right_gutter=$option_right
             menu_star_left=() menu_star_right=()
             for ((star_row = 0; star_row < visible; star_row++)); do
-              # Descend from 65% of the title's brightness to 5% at the bottom.
-              brightness=15
-              (( visible > 1 )) && brightness=$((65 - 60 * star_row / (visible - 1)))
+              # Keep the darkest fade endpoint one row beyond the visible field.
+              brightness=$((65 - 60 * star_row / visible))
               menu_star_left[star_row]=$(ez_menu_side_stars "$((option_left - left_gutter))" "$brightness"; printf '%*s' "$left_gutter" '')
               menu_star_right[star_row]=$(printf '%*s' "$right_gutter" ''; ez_menu_side_stars "$((option_right - right_gutter))" "$brightness")
             done
@@ -189,7 +189,7 @@ function ez_menu_choose() (
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected"
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected"
+          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
           text_cache_key=$new_text_key
         fi
         status_line=$(ez_menu_status_text)

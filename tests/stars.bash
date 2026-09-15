@@ -6,7 +6,7 @@ source -- "$cli_dir/init.bash"
 declare -a stars_cells stars_fade stars_hue stars_sat stars_value
 declare -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
 declare -A stars_text_char stars_text_style stars_text_fade stars_text_seen
-declare -A stars_text_flash
+declare -A stars_text_flash stars_occluded
 declare -A stars_hue_offset stars_cell_render stars_text_palette
 declare -a hint_rows=()
 EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
@@ -47,13 +47,11 @@ for COLUMNS in 5 36 80 160; do
       (( row >= 3 && row <= hint_end + 2 && row < LINES && col < COLUMNS ))
       if (( row >= 5 && row < 10 )); then
         (( col < title_left - 2 || col >= title_left + title_width + 2 ))
-      elif (( row >= 12 && row <= 13 + visible )); then
-        (( col < option_left - 3 || col >= COLUMNS - option_right + 3 ))
-      elif (( row >= 14 + visible && row <= hint_end )); then
-        (( col < hint_left - 3 || col >= hint_left + hint_width + 3 ))
       fi
     done
-    [[ ${stars_fade[13]} == 65 && ${stars_fade[$stars_bottom]} == 5 ]]
+    [[ ${stars_fade[13]} == 65 ]]
+    (( stars_fade[stars_bottom] == 65 - 60 * (stars_bottom - 13) / (stars_bottom - 12) ))
+    (( stars_fade[stars_bottom] > 5 ))
     (( stars_fade[12+visible] > 5 ))
     for ((row = 14; row <= stars_bottom; row++)); do (( stars_fade[row] <= stars_fade[row-1] )); done
     for cell in "${!stars_char[@]}"; do
@@ -64,7 +62,7 @@ done
 LINES=18 COLUMNS=80 visible=3
 mapfile -t hint_rows < <(ez_menu_hint_lines)
 ez_stars_layout 10 5 53 2
-[[ $stars_bottom == 17 && ${stars_fade[17]} == 5 ]]
+[[ $stars_bottom == 17 && ${stars_fade[17]} == 17 ]]
 hint_rows=()
 printf 'PASS extended field, text masks, stretched fade, and saturation bounds\n'
 
@@ -184,7 +182,8 @@ title_cell=$((4 * 80 + 39)) marker_cell=$((8 * 80 + 30)) disabled_cell=$((9 * 80
 [[ ${stars_text_char[$disabled_cell]} == '○' ]]
 [[ ${stars_text_style[$marker_cell]} == 1 && ${stars_text_style[$disabled_cell]} == 9 ]]
 [[ ${stars_text_fade[$disabled_cell]} == 60 ]]
-for cell in "${stars_cells[@]}"; do [[ ! ${stars_text_char[$cell]+present} ]]; done
+# The field now extends behind text; foreground glyphs win during rendering.
+[[ " ${stars_cells[*]} " == *" $marker_cell "* ]]
 [[ ${stars_hue[3]} == $(((stars_hue[0] + (stars_hue[1] - stars_hue[0] + stars_hue[2] - stars_hue[0]) / 3 + 180) % 360)) ]]
 stars_next=999999
 ez_stars_tick 3999
@@ -382,24 +381,63 @@ done
 for ((row = stars_top + 1; row <= stars_bottom; row++)); do
   (( stars_density[row] >= stars_density[row-1] ))
 done
-[[ ${stars_fade[$stars_bottom]} == 5 ]]
+(( stars_fade[stars_bottom] > 5 ))
 # Equal-size top/bottom samples isolate spatial bias from row width and masking.
 stars_cells=()
 for ((col = 0; col < 80; col++)); do
   stars_cells+=("$(((stars_top - 1) * COLUMNS + col))" "$(((stars_bottom - 1) * COLUMNS + col))")
 done
-stars_char=() stars_birth=() stars_text_char=()
-upper=0 lower=0
-for ((trial = 0; trial < 600; trial++)); do
-  stars_next=0 stars_birth=() stars_char=()
-  ez_stars_tick 2000
-  for cell in "${!stars_birth[@]}"; do
-    if (( cell / COLUMNS + 1 == stars_top )); then upper=$((upper + 1)); else lower=$((lower + 1)); fi
+stars_char=() stars_birth=() stars_text_char=() stars_occluded=()
+ez_stars_twinkle_timing
+[[ $stars_twinkle_delay == 200 && $stars_horizon_delay == 80 ]]
+# At the real 20 FPS cadence the extra stream must not steal baseline top births.
+for horizon in 0 1; do
+  ez_stars_init
+  ez_stars_twinkle_timing
+  (( horizon )) || stars_horizon_delay=0
+  upper=0 lower=0 RANDOM=2161
+  for ((instant = 0; instant < 200000; instant += 50)); do
+    stars_birth=() stars_char=()
+    ez_stars_tick "$instant"
+    (( ${#stars_birth[@]} <= 1 ))
+    for cell in "${!stars_birth[@]}"; do
+      if (( cell / COLUMNS + 1 == stars_top )); then upper=$((upper + 1)); else lower=$((lower + 1)); fi
+    done
   done
+  if (( ! horizon )); then base_upper=$upper base_lower=$lower; fi
 done
-(( lower > upper * 4 && lower < upper * 9 ))
+(( upper * 100 > base_upper * 80 && upper * 100 < base_upper * 120 ))
+(( lower > base_lower * 2 ))
 EZ_MENU_HORIZON_DENSITY_PERCENT=100
 ez_stars_init
 ez_stars_layout 10 5 53 2
 for density in "${stars_density[@]}"; do [[ $density == 1000 ]]; done
 printf 'PASS denser dim horizon, weighted single twinkles, and flat-density override\n'
+
+# Text occludes glyph cells only; an underlying star survives navigation, and
+# spaces inside labels/hints stay part of the field on repairs as well as ticks.
+COLUMNS=80 LINES=24 visible=1 title_rows=('T') hint_rows=('Go now')
+labels=('A B') menu_enabled=(1) menu_disabled_notes=()
+read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
+ez_stars_layout 10 1 1 2
+ez_stars_text_layout 10 1 2 0 0 0 "${labels[@]}"
+glyph=$((12 * COLUMNS + option_left + 2)) gap=$((glyph + 1))
+[[ ${stars_occluded[$glyph]} == 1 && ! ${stars_occluded[$gap]+present} ]]
+stars_char=([$glyph]='*' [$gap]='+') stars_palette=([$glyph]=0 [$gap]=0)
+stars_birth=() stars_seen=() stars_saturation=() stars_hue_offset=()
+stars_next=999999 stars_horizon_next=999999
+ez_stars_tick 0
+[[ ! ${stars_seen[$glyph]+present} && ${stars_seen[$gap]} == *':+' ]]
+[[ ${stars_char[$glyph]} == '*' ]]
+rendered=$(ez_menu_overlay_text 13 "$((option_left + 2))" 'A B' "$C_WHITE" "$C_BOLD")
+[[ $rendered == *"${C_BOLD}A"* && $rendered == *"${stars_cell_render[$gap]}"* && $rendered == *"${C_BOLD}B"* ]]
+ez_stars_text_layout 10 1 2 0 0 0 ''
+ez_stars_tick 10
+[[ ${stars_seen[$glyph]} == *':*' ]]
+# Even if every candidate is under foreground text, no birth can overwrite it.
+ez_stars_text_layout 10 1 2 0 0 0 'A B'
+stars_cells=("$glyph") stars_char=() stars_birth=()
+stars_next=0 stars_horizon_next=0
+ez_stars_tick 2000
+[[ ${#stars_birth[@]} == 0 ]]
+printf 'PASS transparent text spaces, foreground occlusion, and preserved underlying stars\n'

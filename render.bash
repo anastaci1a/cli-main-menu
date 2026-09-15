@@ -173,6 +173,22 @@ function ez_menu_option_layout() {
   printf '%d %d %d %d %d\n' "$marker_width" "$label_width" "$option_block_width" "$indent" "$right_width"
 }
 
+# Draw foreground words while revealing the animated field through their spaces.
+function ez_menu_overlay_text() {
+  local row=$1 col=$2 text=$3 color=$4 weight=$5 index word=''
+  for ((index = 0; index < ${#text}; index++)); do
+    if [[ ${text:index:1} == ' ' ]]; then
+      [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"
+      word=''
+      ez_stars_render_span "$row" "$((col + index))" 1
+    else
+      word+=${text:index:1}
+    fi
+  done
+  [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"
+  return 0
+}
+
 function ez_menu_draw() {
   local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
   local marker_color note note_text
@@ -201,9 +217,10 @@ function ez_menu_draw() {
     if (( ${ez_stars_animated:-0} )); then
       screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
       printf '\r'
-      ez_stars_render_span "$screen_row" 0 "$((indent + marker_width))"
-      printf ' %s%s%s%s%s%s%s' "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding"
-      ez_stars_render_span "$screen_row" "$((indent + option_block_width))" "$right_width"
+      ez_stars_render_span "$screen_row" 0 "$((indent + marker_width + 1))"
+      ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1))" "$label" "$label_color" "$weight"
+      ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + ${#label}))" "$note_text" "$label_color" ''
+      ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + ${#label} + ${#note_text}))" "$(( ${#label_padding} + right_width ))"
       printf '\r\n'
       continue
     fi

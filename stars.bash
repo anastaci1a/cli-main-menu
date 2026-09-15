@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stateful star animation. All stars_* variables belong to the chooser subshell.
-# Coordinates are terminal cells; text/gutters never enter stars_cells.
+# Coordinates are terminal cells; foreground glyphs occlude the field.
 
 function ez_stars_now() {
   local clock_value unused fraction
@@ -37,6 +37,7 @@ function ez_stars_init() {
   (( stars_twinkle_rate > 1000 )) && stars_twinkle_rate=1000
   # Scale opportunity frequency, preserving the envelope's peak/trough ratio.
   stars_twinkle_delay=$((50000 / stars_twinkle_rate))
+  stars_horizon_delay=0 stars_horizon_next=0
   [[ $stars_hue_spread =~ ^[0-9]{1,3}$ ]] || stars_hue_spread=60
   stars_hue_spread=$((10#$stars_hue_spread))
   (( stars_hue_spread > 360 )) && stars_hue_spread=360
@@ -118,18 +119,14 @@ function ez_stars_init() {
 
 function ez_stars_layout() {
   local banner_count=$1 title_height=$2 title_width=$3 margin=$4
-  local total_count=${5:-$visible} hint_width=0 hint hint_left hint_right page_width=0 page_left page_right
+  local total_count=${5:-$visible} page_width=0 page_left page_right page
   local option_start=$((banner_count + 3)) row col cell mask_left mask_right brightness depth
   local option_end=$((option_start + visible - 1)) hint_start=$((option_start + visible + 1)) hint_end
   local title_left=$(( (COLUMNS - title_width) / 2 )) chars='*.+ '
-  for hint in "${hint_rows[@]}"; do (( ${#hint} > hint_width )) && hint_width=${#hint}; done
-  hint_left=$(( (COLUMNS - hint_width) / 2 ))
-  (( hint_left < 0 )) && hint_left=0
-  hint_right=$((hint_left + hint_width + 3)) hint_left=$((hint_left - 3))
   hint_end=$((hint_start + ${#hint_rows[@]} - 1))
   if (( visible < total_count )); then
-    printf -v hint '%d-%d of %d' "$total_count" "$total_count" "$total_count"
-    page_width=${#hint}
+    printf -v page '%d-%d of %d' "$total_count" "$total_count" "$total_count"
+    page_width=${#page}
   fi
   page_left=$(( (COLUMNS - page_width) / 2 - 3 )) page_right=$(( (COLUMNS + page_width + 1) / 2 + 3 ))
   stars_cells=() stars_char=() stars_palette=() stars_saturation=() stars_hue_offset=()
@@ -146,25 +143,14 @@ function ez_stars_layout() {
     mask_left=$COLUMNS mask_right=$COLUMNS brightness=100
     if (( row >= 3 + margin && row < 3 + margin + title_height )); then
       mask_left=$((title_left - 2)) mask_right=$((title_left + title_width + 2))
-    elif (( row >= option_start && row <= option_end )); then
-      mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
-    elif (( row >= hint_start && row <= hint_end )); then
-      mask_left=$hint_left mask_right=$hint_right
-    elif (( row == option_end + 1 )); then
-      # Protect the pagination text and the approach to both text blocks.
-      mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
-      (( hint_left < mask_left )) && mask_left=$hint_left
-      (( hint_right > mask_right )) && mask_right=$hint_right
-      (( page_left < mask_left )) && mask_left=$page_left
-      (( page_right > mask_right )) && mask_right=$page_right
+    elif (( row == option_end + 1 && page_width )); then
+      mask_left=$((page_left + 3)) mask_right=$((page_right - 3))
     elif (( row > banner_count + 1 && row < option_start )); then
       brightness=80
-      # Keep the approach to the option block clear as well.
-      mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
     fi
     if (( row >= option_start )); then
-      brightness=5
-      (( stars_bottom > option_start )) && brightness=$((65 - 60 * (row - option_start) / (stars_bottom - option_start)))
+      # Sample [0, 1): the darkest endpoint lies one row beyond the field.
+      brightness=$((65 - 60 * (row - option_start) / (stars_bottom - option_start + 1)))
     fi
     stars_fade[row]=$brightness
     for ((col = 0; col < COLUMNS; col++)); do
@@ -205,6 +191,10 @@ function ez_stars_text_layout() {
   local row col cell line index text style fade hint_width=0 left=$(( (COLUMNS - title_width) / 2 ))
   local -a letters=("${title_rows[@]}")
   local -a old_cells=("${!stars_text_char[@]}")
+  local -a old_occluded=("${!stars_occluded[@]}") labels=("${@:7}")
+  local label note label_width marker_width block_width indent right_width
+  stars_occluded=()
+  read -r marker_width label_width block_width indent right_width < <(ez_menu_option_layout "${labels[@]}")
   stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
   if (( compact )); then
     text=$(ez_menu_title_text)
@@ -235,6 +225,16 @@ function ez_stars_text_layout() {
     cell=$(( (row - 1) * COLUMNS + option_left ))
     stars_text_char[$cell]=$text stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
     stars_text_palette[$cell]=3
+    label=${labels[index]-} note=${menu_disabled_notes[index]-}
+    if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= label_width )); then
+      label+=" $note"
+    fi
+    label=${label:0:label_width}
+    for ((col = 0; col < ${#label}; col++)); do
+      [[ ${label:col:1} == ' ' ]] && continue
+      cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
+      stars_occluded[$cell]=1
+    done
   done
   for text in "${hint_rows[@]}"; do (( ${#text} > hint_width )) && hint_width=${#text}; done
   left=$(( (COLUMNS - hint_width) / 2 ))
@@ -252,9 +252,9 @@ function ez_stars_text_layout() {
       stars_text_palette[$cell]=4
     done
   done
-  for cell in "${old_cells[@]}"; do
+  for cell in "${old_cells[@]}" "${old_occluded[@]}"; do
     if [[ ! ${stars_text_char[$cell]+present} ]]; then
-      unset 'stars_text_seen[$cell]' 'stars_cell_render[$cell]'
+      unset 'stars_text_seen[$cell]' 'stars_cell_render[$cell]' 'stars_seen[$cell]'
     fi
   done
   for cell in "${!stars_text_char[@]}"; do
@@ -262,6 +262,26 @@ function ez_stars_text_layout() {
       unset 'stars_text_seen[$cell]'
     fi
   done
+  ez_stars_twinkle_timing
+}
+
+# Keep the uniform baseline clock; add density-weighted opportunities for the
+# excess above that baseline. Baseline births take priority so a busy horizon
+# never steals a top-row opportunity under the one-birth-per-frame limit.
+function ez_stars_twinkle_timing() {
+  local cell row total=0 count=0
+  for cell in "${stars_cells[@]}"; do
+    [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} ]] && continue
+    row=$((cell / COLUMNS + 1))
+    total=$((total + ${stars_density[row]:-1000} - 1000)) count=$((count + 1))
+  done
+  stars_twinkle_delay=$((50000 / stars_twinkle_rate))
+  stars_horizon_delay=0
+  if (( total )); then
+    stars_horizon_delay=$((50000000 * count / (stars_twinkle_rate * total)))
+    (( stars_horizon_delay < 1 )) && stars_horizon_delay=1
+  fi
+  return 0
 }
 
 # Smoothstep easing, in thousandths, without floating-point subprocesses.
@@ -370,10 +390,29 @@ function ez_stars_twinkle_weight() {
   stars_spawn_weight=$((200 + 800 * sine * sine / 1000000))
 }
 
+# Sample one unoccupied text-free cell, optionally weighted by excess density.
+function ez_stars_try_spawn() {
+  local elapsed=$1 horizon=$2 cell row index start count=${#stars_cells[@]}
+  (( count )) || return 0
+  start=$(((RANDOM * 32768 + RANDOM) % count))
+  for ((index = 0; index < count; index++)); do
+    if (( horizon )); then cell=${stars_cells[(RANDOM * 32768 + RANDOM) % count]};
+    else cell=${stars_cells[(start + index) % count]}; fi
+    [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} || ${stars_birth[$cell]+present} ]] && continue
+    if (( horizon )); then
+      row=$((cell / COLUMNS + 1))
+      (( (RANDOM * 32768 + RANDOM) % (stars_density_max - 1000) < ${stars_density[row]:-1000} - 1000 )) || continue
+    fi
+    ez_stars_spawn "$cell" "$elapsed"
+    stars_spawned=1
+    break
+  done
+  return 0
+}
+
 function ez_stars_tick() {
   local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token piece style
-  local index count=${#stars_cells[@]}
-  local sweeping=0 stable=0
+  local sweeping=0 stable=0 stars_spawned=0
   stars_output=''
   cycle=$((elapsed / stars_period)) phase=$((elapsed % stars_period))
   (( cycle > 0 && phase < stars_duration )) && sweeping=1
@@ -384,34 +423,23 @@ function ez_stars_tick() {
   # Faster random opportunities keep the same smooth probability envelope.
   if (( elapsed >= stars_next )); then
     ez_stars_twinkle_weight "$elapsed"
-    if (( count && RANDOM % 1000 < stars_spawn_weight )); then
-      # Rejection sampling gives new twinkles the same horizon weighting as the
-      # field, without duplicating cells or spawning groups. Bound retries even
-      # when every available cell already has a twinkle.
-      for ((index = 0; index < count; index++)); do
-        cell=${stars_cells[(RANDOM * 32768 + RANDOM) % count]}
-        row=$((cell / COLUMNS + 1))
-        (( (RANDOM * 32768 + RANDOM) % stars_density_max < ${stars_density[row]:-$stars_density_max} )) || continue
-        if [[ ! ${stars_birth[$cell]+present} ]]; then
-          ez_stars_spawn "$cell" "$elapsed"
-          break
-        fi
-      done
-      # Tiny or crowded fields can exhaust retries; still fill one free cell
-      # when an opportunity succeeds, as before horizon weighting.
-      if (( index == count )); then
-        for cell in "${stars_cells[@]}"; do
-          if [[ ! ${stars_birth[$cell]+present} ]]; then
-            ez_stars_spawn "$cell" "$elapsed"
-            break
-          fi
-        done
-      fi
+    if (( RANDOM % 1000 < stars_spawn_weight )); then
+      ez_stars_try_spawn "$elapsed" 0
     fi
     # One birth at most per frame; never catch up missed time with a burst.
     stars_next=$((elapsed + 1 + (RANDOM * 32768 + RANDOM) % stars_twinkle_delay))
   fi
+  if (( ! stars_spawned && stars_horizon_delay && elapsed >= stars_horizon_next )); then
+    ez_stars_twinkle_weight "$elapsed"
+    if (( RANDOM % 1000 < stars_spawn_weight )); then
+      ez_stars_try_spawn "$elapsed" 1
+    fi
+    stars_horizon_next=$((elapsed + 1 + (RANDOM * 32768 + RANDOM) % stars_horizon_delay))
+  fi
   for cell in "${!stars_char[@]}"; do
+    # Foreground glyphs occlude the field; spaces remain transparent. Keep the
+    # underlying star's state so scrolling can reveal it without rerandomizing.
+    [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} ]] && continue
     # Between effects, unchanged stars cost no color conversion or terminal I/O.
     if (( stable )) && [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} ]]; then continue; fi
     row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))

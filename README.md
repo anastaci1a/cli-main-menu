@@ -86,7 +86,7 @@ dimensions, so changing its length does not require editing the renderer.
 Animations run in the selector at a target of 20 frames per second, updating
 only changed star and accent cells between foreground redraws. No background worker or
 extra runtime dependency is needed. The title, option block, markers, hints, and
-status bar remain protected from stars; viewport changes rebuild the field.
+status bar remain readable over stars; viewport changes rebuild the field.
 
 Twinkles start one at a time, with random opportunities spaced 1–200 ms apart
 at the default 2.5× rate. The rate setting scales opportunity frequency
@@ -109,11 +109,20 @@ applied even to white peaks, so the bottom stays dimmer.
 Stars and title characters briefly turn bold around their own near-white sweep
 peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
-the terminal has room. The row fade stretches from 65% at the first option to
-5% at the field's last row. Star density eases upward quadratically from the
+the terminal has room. The row fade starts at 65% at the first option and approaches
+5% one row beyond the field. That darkest endpoint is excluded, leaving the last
+visible row at the preceding color step. Star density eases upward quadratically from the
 original 1-in-8 chance at the top to 6-in-8 at the bottom, creating a dense, dim
-horizon. New twinkles favor the same lower rows. Text areas keep clear gutters,
-including around the hints and options.
+horizon. Twinkle frequency follows that same density gradient: the original
+uniform opportunities remain, with extra opportunities weighted by each row's
+density above baseline. Uniform births take priority, so the horizon cannot
+crowd out the top when reaching the one-birth-per-frame limit. Both streams use
+the same 2.5× rate setting and smooth sweep envelope.
+
+Stars extend behind the option block and control hints, including their spaces.
+Foreground letters and circle markers always win over stars. The background
+retains its state under text, so scrolling reveals existing stars rather than
+rerandomizing them. The title keeps its surrounding clear space.
 
 Stars share one central hue, with stable offsets in a 60° total range (±30°).
 The offsets approximate a Gaussian distribution with a 10° standard deviation,

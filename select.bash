@@ -10,6 +10,7 @@ function ez_menu_choose() (
   local status_line='' status_output='' status_seen='' status_token elapsed
   local first=0 visible available_rows frame row frame_banner
   local term_size term_lines term_columns hint_count main_banner=0
+  local terminal_state
   local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
   local number_width label_width option_block_width option_left option_right
@@ -86,11 +87,16 @@ function ez_menu_choose() (
     return 130
   fi
 
-  # Leave the menu screen before launching an action (including tmux/fg).
-  trap 'printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
+  # read -s only suppresses echo during the read itself. Keep it off while
+  # rendering too, so queued arrow bytes never appear as literal ^[[A text.
+  terminal_state=$(stty -g <&0 2>/dev/null) || return 130
+  # Restore the exact input modes before launching an action (including tmux/fg).
+  trap 'stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
-  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH CONT
+  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH
+  trap 'stty -echo -echonl <&0 2>/dev/null; redraw=1; layout_dirty=1; full_redraw=1' CONT
+  stty -echo -echonl <&0 || return 130
   printf '\033[?1049h\033[?1004h\033[?25l\033[2J\033[H' >&2
   mapfile -t banner_rows <<< "$banner"
   (( ${#banner_rows[@]} > 3 )) && main_banner=1

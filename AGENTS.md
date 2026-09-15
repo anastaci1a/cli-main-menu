@@ -43,6 +43,8 @@
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
+- Keep input echo disabled throughout the selector, including redraws between
+  reads. Restore the caller's exact terminal settings before returning or exiting.
 - Disabled options must be skipped in both directions and refused by the numeric
   fallback. A fully disabled list must terminate without looping forever.
 - Job availability means stopped jobs in the calling shell. Run actions there,

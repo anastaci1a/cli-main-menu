@@ -53,6 +53,17 @@ sub finish {
   die "child failed: $?\n$buf" if $?;
   close $pty;
 }
+start_case('input_echo');
+expect(qr/INPUT_WINDOW/,'redraw input window');
+send_keys("\e[A");
+expect(qr/\e\[1mThree/,'up during redraw selects last option');
+die 'arrow key echoed during redraw' if index($buf, '^[[A') >= 0 || index($buf, "\e[A") >= 0;
+send_keys(("\e[A" x 6)."\n");
+expect(qr/SELECTED=2 STATUS=0/,'queued arrows preserve selection');
+die 'queued arrow keys echoed' if index($buf, '^[[A') >= 0 || index($buf, "\e[A") >= 0;
+expect(qr/TTY_RESTORED/,'terminal input modes restored');
+finish();
+print "PASS arrows during redraw and queued repeats stay silent; terminal modes restored\n";
 start_case('chooser');
 expect(qr/Up\/Down: move/,'initial menu');
 die 'selected option is not bold' unless $buf =~ /\e\[1mOne/;

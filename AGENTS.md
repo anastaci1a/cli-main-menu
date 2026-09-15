@@ -27,6 +27,9 @@
 - Twinkles permanently replace their base stars, finish before sweeps, and fade
   out more slowly than they brighten. Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
+- Spawn twinkles individually. Keep each star's randomized saturation stable.
+- Sweep title/number accents using the shared spatial phase and complementary
+  palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Disabled options must be skipped in both directions and refused by the numeric
   fallback. A fully disabled list must terminate without looping forever.

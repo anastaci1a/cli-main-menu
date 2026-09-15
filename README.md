@@ -79,11 +79,12 @@ dimensions, so changing its length does not require editing the renderer.
 ### Animated stars
 
 Animations run in the selector at a target of 20 frames per second, updating
-only changed star cells between foreground redraws. No background worker or
+only changed star and accent cells between foreground redraws. No background worker or
 extra runtime dependency is needed. The title, option block, arrow, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
-Twinkle bursts arrive at random intervals of 80–1500 ms when a sweep is clear.
+Twinkles start one at a time, with random delays of 1–500 ms when a sweep is clear.
+Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
 then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
 permanently. Births pause early enough for all twinkles to finish before a sweep.
@@ -93,6 +94,13 @@ bottom right. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
 
+Each star gets a random baseline saturation between its palette color's original
+saturation and 80%, retained for its lifetime. The title and option numbers
+(including the selection arrow) join the same sweep with a shared hue 180°
+opposite the center of the star palette. Their baseline hue advances by the same
+70° per sweep. Title/selection bolding and disabled-number strike/dimming remain
+intact; option labels and hints keep their normal styling.
+
 Override these settings in ignored `config.bash`, then source `.bashrc`:
 
 ```bash
@@ -100,6 +108,8 @@ EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
+EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
+EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/number hue
 ```
 
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the

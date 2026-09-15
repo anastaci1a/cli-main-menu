@@ -14,9 +14,11 @@ function ez_menu_choose() (
   local ez_stars_animated=0 input_timeout=1 actual_title_width
   local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
   local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
+  local stars_sat_max stars_accent_offset stars_white stars_color_cycle
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
   local -a stars_cells stars_fade stars_hue stars_sat stars_value
-  local -A stars_char stars_palette stars_birth stars_seen stars_rgb_cache
+  local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
+  local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
@@ -167,6 +169,9 @@ function ez_menu_choose() (
       (( first > count - visible )) && first=$((count - visible))
       (( selected < first )) && first=$selected
       (( selected >= first + visible )) && first=$((selected - visible + 1))
+      if (( ez_stars_animated )); then
+        ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$number_width"
+      fi
       # Repaint from home in one write. No relative cursor offsets can drift.
       # The once-per-second repaint also repairs terminals without focus events.
       frame=$(

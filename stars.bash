@@ -89,25 +89,49 @@ function ez_stars_init() {
 
 function ez_stars_layout() {
   local banner_count=$1 title_height=$2 title_width=$3 margin=$4
+  local total_count=${5:-$visible} hint_width=0 hint hint_left hint_right page_width=0 page_left page_right
   local option_start=$((banner_count + 3)) row col cell mask_left mask_right brightness
+  local option_end=$((option_start + visible - 1)) hint_start=$((option_start + visible + 1)) hint_end
   local title_left=$(( (COLUMNS - title_width) / 2 )) chars='*.+ '
+  for hint in "${hint_rows[@]}"; do (( ${#hint} > hint_width )) && hint_width=${#hint}; done
+  hint_left=$(( (COLUMNS - hint_width) / 2 ))
+  (( hint_left < 0 )) && hint_left=0
+  hint_right=$((hint_left + hint_width + 3)) hint_left=$((hint_left - 3))
+  hint_end=$((hint_start + ${#hint_rows[@]} - 1))
+  if (( visible < total_count )); then
+    printf -v hint '%d-%d of %d' "$total_count" "$total_count" "$total_count"
+    page_width=${#hint}
+  fi
+  page_left=$(( (COLUMNS - page_width) / 2 - 3 )) page_right=$(( (COLUMNS + page_width + 1) / 2 + 3 ))
   stars_cells=() stars_char=() stars_palette=() stars_saturation=() stars_hue_offset=()
   stars_birth=() stars_seen=() stars_fade=() stars_cell_render=() stars_text_seen=()
-  stars_top=3 stars_bottom=$((option_start + visible - 1))
+  # Leave the final terminal row free so repainting cannot scroll the screen.
+  stars_top=3 stars_bottom=$((hint_end + 2))
   (( stars_bottom >= LINES )) && stars_bottom=$((LINES - 1))
   stars_sweep_bottom=$stars_bottom
   for ((row = stars_top; row <= stars_bottom; row++)); do
     mask_left=$COLUMNS mask_right=$COLUMNS brightness=100
     if (( row >= 3 + margin && row < 3 + margin + title_height )); then
       mask_left=$((title_left - 2)) mask_right=$((title_left + title_width + 2))
-    elif (( row >= option_start )); then
+    elif (( row >= option_start && row <= option_end )); then
       mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
-      brightness=15
-      (( visible > 1 )) && brightness=$((65 - 60 * (row - option_start) / (visible - 1)))
-    elif (( row > banner_count + 1 )); then
+    elif (( row >= hint_start && row <= hint_end )); then
+      mask_left=$hint_left mask_right=$hint_right
+    elif (( row == option_end + 1 )); then
+      # Protect the pagination text and the approach to both text blocks.
+      mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
+      (( hint_left < mask_left )) && mask_left=$hint_left
+      (( hint_right > mask_right )) && mask_right=$hint_right
+      (( page_left < mask_left )) && mask_left=$page_left
+      (( page_right > mask_right )) && mask_right=$page_right
+    elif (( row > banner_count + 1 && row < option_start )); then
       brightness=80
       # Keep the approach to the option block clear as well.
       mask_left=$((option_left - 3)) mask_right=$((COLUMNS - option_right + 3))
+    fi
+    if (( row >= option_start )); then
+      brightness=5
+      (( stars_bottom > option_start )) && brightness=$((65 - 60 * (row - option_start) / (stars_bottom - option_start)))
     fi
     stars_fade[row]=$brightness
     for ((col = 0; col < COLUMNS; col++)); do
@@ -188,7 +212,7 @@ function ez_stars_text_layout() {
   for ((line = 0; line < ${#hint_rows[@]}; line++)); do
     row=$((banner_count + visible + 4 + line))
     (( row >= LINES )) && break
-    stars_sweep_bottom=$row
+    (( row > stars_sweep_bottom )) && stars_sweep_bottom=$row
     text=${hint_rows[line]}
     for ((col = 0; col < ${#text} && left + col < COLUMNS; col++)); do
       [[ ${text:col:1} == ' ' ]] && continue
@@ -279,6 +303,18 @@ function ez_stars_sweep() {
   return 0
 }
 
+function ez_stars_twinkle_weight() {
+  local elapsed=$1 phase position product sine
+  # Raised sine-squared envelope: its trough is centered on the shimmer.
+  # Bhaskara's sine approximation avoids a process or floating-point work per
+  # frame. Weight stays between 20% and 100%, with smooth, periodic shoulders.
+  phase=$(((elapsed - stars_duration / 2 + stars_period) % stars_period))
+  position=$((phase * 1000 / stars_period))
+  product=$((position * (1000 - position)))
+  sine=$((16000 * product / (5000000 - 4 * product)))
+  stars_spawn_weight=$((200 + 800 * sine * sine / 1000000))
+}
+
 function ez_stars_tick() {
   local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token piece
   local index start count=${#stars_cells[@]}
@@ -290,9 +326,10 @@ function ez_stars_tick() {
   if (( cycle != stars_cache_cycle )); then
     stars_rgb_cache=() stars_cache_cycle=$cycle
   fi
-  # Finish every twinkle before the sweep starts. Never spawn during its passage.
+  # Keep the same random opportunities, weighted smoothly around the sweep.
   if (( elapsed >= stars_next )); then
-    if (( count && (cycle == 0 || phase >= stars_duration) && phase + 900 < stars_period )); then
+    ez_stars_twinkle_weight "$elapsed"
+    if (( count && RANDOM % 1000 < stars_spawn_weight )); then
       start=$(((RANDOM * 32768 + RANDOM) % count))
       for ((index = 0; index < count; index++)); do
         cell=${stars_cells[(start + index) % count]}
@@ -327,9 +364,13 @@ function ez_stars_tick() {
       if (( intensity < 250 )); then char='.';
       elif (( intensity < 650 )); then char='+';
       else char='*'; fi
-    elif (( sweeping )); then
+    fi
+    if (( sweeping )); then
       ez_stars_sweep "$row" "$col" "$cycle" "$phase"
-      white=$stars_white color_cycle=$stars_color_cycle
+      # A crossing shimmer can desaturate a twinkle, but its own slow fade still
+      # controls intensity and lifetime. There is no abrupt hue flip or cutoff.
+      white=$((1000 - (1000 - white) * (1000 - stars_white) / 1000))
+      color_cycle=$stars_color_cycle
     fi
     ez_stars_color "${stars_palette[$cell]}" "$color_cycle" "$white" "${stars_fade[row]}" "$intensity" "${stars_saturation[$cell]-}" "${stars_hue_offset[$cell]:-0}"
     token="$stars_r;$stars_g;$stars_b:$char"

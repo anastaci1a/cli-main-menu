@@ -18,8 +18,9 @@
 ## Behavior to preserve
 
 - Define entries in `menu.bash`; do not hard-code option counts elsewhere.
-- Keep number columns and labels aligned as counts cross 9 and 99. Center the
-  whole left-aligned block, reserving space for the selection arrow.
+- Use one marker column: ○ for unselected options, ● for the selected option.
+  Center the whole left-aligned block independently of option count. Keep numbers
+  in the non-TTY fallback, where users need them to choose an option by typing.
 - Keep full-width status/stars, centered title/hints, responsive hint grouping,
   disabled styling, and all-or-nothing disabled explanations.
 - Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
@@ -36,7 +37,7 @@
 - Weight individual twinkle opportunities smoothly through the sweep. A sweep
   reduces their frequency but must never switch births off abruptly. Existing
   twinkles continue their fade and share the crossing white/hue treatment.
-- Sweep title/number/hint accents using the shared spatial phase and complementary
+- Sweep title/marker/hint accents using the shared spatial phase and complementary
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
 - Ease the diagonal's movement in and out while preserving individual flash
   durations. Precompute arrival times instead of solving easing for every cell/frame.

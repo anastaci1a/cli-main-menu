@@ -13,7 +13,7 @@ function ez_menu_choose() (
   local terminal_state
   local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
-  local number_width label_width option_block_width option_left option_right
+  local marker_width label_width option_block_width option_left option_right
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
   local ez_stars_animated=0 input_timeout=1 actual_title_width
   local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
@@ -151,7 +151,7 @@ function ez_menu_choose() (
         (( available_rows < 1 )) && available_rows=1
         visible=$count
         (( visible > available_rows )) && visible=$available_rows
-        read -r number_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
+        read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
         new_star_key="$COLUMNS:$LINES:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
           if (( ez_stars_animated )); then
@@ -186,7 +186,7 @@ function ez_menu_choose() (
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected"
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$number_width"
+          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected"
           text_cache_key=$new_text_key
         fi
         status_line=$(ez_menu_status_text)

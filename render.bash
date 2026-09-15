@@ -150,10 +150,9 @@ function ez_menu_side_stars() {
 }
 
 function ez_menu_option_layout() {
-  local count=$# number_width label_width=0 label option_block_width indent right_width
+  local marker_width=1 label_width=0 label option_block_width indent right_width
   local index=0 note measured_width available_width
-  number_width=${#count}
-  available_width=$(( ${COLUMNS:-80} - number_width - 3 ))
+  available_width=$(( ${COLUMNS:-80} - marker_width - 2 ))
   for label in "$@"; do
     measured_width=${#label}
     note=${menu_disabled_notes[index]-}
@@ -164,28 +163,27 @@ function ez_menu_option_layout() {
     index=$((index + 1))
   done
   # Center one fixed-width block, then left-align every row inside it.
-  (( label_width > ${COLUMNS:-80} - number_width - 3 )) && label_width=$(( ${COLUMNS:-80} - number_width - 3 ))
+  (( label_width > available_width )) && label_width=$available_width
   (( label_width < 1 )) && label_width=1
-  option_block_width=$((1 + number_width + 1 + label_width))
+  option_block_width=$((marker_width + 1 + label_width))
   indent=$(( (${COLUMNS:-80} - option_block_width) / 2 ))
   (( indent < 0 )) && indent=0
   right_width=$(( ${COLUMNS:-80} - indent - option_block_width ))
   (( right_width < 0 )) && right_width=0
-  printf '%d %d %d %d %d\n' "$number_width" "$label_width" "$option_block_width" "$indent" "$right_width"
+  printf '%d %d %d %d %d\n' "$marker_width" "$label_width" "$option_block_width" "$indent" "$right_width"
 }
 
 function ez_menu_draw() {
-  local selected=$1 first=$2 visible=$3 index label pointer weight number_weight label_color label_padding
-  local number_color note note_text pointer_padding
-  local label_width number number_width option_block_width indent right_width hint hint_width=0 page
+  local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
+  local marker_color note note_text
+  local label_width marker_width option_block_width indent right_width hint hint_width=0 page
   local left_stars right_stars screen_row
   local -a labels hints
   shift 3
   labels=("$@")
-  read -r number_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
+  read -r marker_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
   for ((index = first; index < first + visible; index++)); do
     label=${labels[index]}
-    number=$((index + 1))
     note=${menu_disabled_notes[index]-}
     note_text=''
     # Explanations are indivisible: omit them if the complete label won't fit.
@@ -194,16 +192,16 @@ function ez_menu_draw() {
     fi
     label=${label:0:label_width}
     printf -v label_padding '%*s' "$((label_width - ${#label} - ${#note_text}))" ''
-    pointer=' ' weight='' number_weight='' label_color=$C_GRAY number_color=$C_PINK
+    marker='○' weight='' marker_weight='' label_color=$C_GRAY marker_color=$C_PINK
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then
-      weight=$C_STRIKE number_weight=$C_STRIKE label_color=$C_DISABLED number_color=$C_DISABLED_NUMBER
+      weight=$C_STRIKE marker_weight=$C_STRIKE label_color=$C_DISABLED marker_color=$C_DISABLED_NUMBER
     elif (( index == selected )); then
-      pointer='●' weight=$C_BOLD number_weight=$C_BOLD label_color=$C_WHITE
+      marker='●' weight=$C_BOLD marker_weight=$C_BOLD label_color=$C_WHITE
     fi
     if (( ${ez_stars_animated:-0} )); then
       screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
       printf '\r'
-      ez_stars_render_span "$screen_row" 0 "$((indent + number_width + 1))"
+      ez_stars_render_span "$screen_row" 0 "$((indent + marker_width))"
       printf ' %s%s%s%s%s%s%s' "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding"
       ez_stars_render_span "$screen_row" "$((indent + option_block_width))" "$right_width"
       printf '\r\n'
@@ -213,14 +211,8 @@ function ez_menu_draw() {
     right_stars=${menu_star_right[index-first]-}
     [[ -n $left_stars ]] || printf -v left_stars '%*s' "$indent" ''
     [[ -n $right_stars ]] || printf -v right_stars '%*s' "$right_width" ''
-    # Use one gutter cell for the selector without moving numbers or labels.
-    pointer_padding=''
-    if (( indent > 0 )); then
-      left_stars=${left_stars% }
-      pointer_padding=' '
-    fi
-    printf '\r\033[2K%s%s%s%s%*d%s %s%s%s%s%s%s%s%s\r\n' \
-      "$left_stars" "$number_color" "$pointer$pointer_padding" "$number_weight" "$number_width" "$number" "$C_RESET" \
+    printf '\r\033[2K%s%s%s%s%s %s%s%s%s%s%s%s%s\r\n' \
+      "$left_stars" "$marker_color" "$marker_weight" "$marker" "$C_RESET" \
       "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding" "$right_stars"
   done
   if (( ${ez_stars_animated:-0} )); then

@@ -187,7 +187,7 @@ function ez_stars_pick_saturation() {
 
 # Accent cells are separate from the spawn mask: text can sweep, never twinkle.
 function ez_stars_text_layout() {
-  local banner_count=$1 title_width=$2 margin=$3 compact=$4 first=$5 selected=$6 number_width=$7
+  local banner_count=$1 title_width=$2 margin=$3 compact=$4 first=$5 selected=$6
   local row col cell line index text style fade hint_width=0 left=$(( (COLUMNS - title_width) / 2 ))
   local -a letters=("${title_rows[@]}")
   local -a old_cells=("${!stars_text_char[@]}")
@@ -214,22 +214,12 @@ function ez_stars_text_layout() {
     style=0 fade=100
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
     elif (( index == selected )); then style=1; fi
-    if (( index == selected )); then
-      # Store the UTF-8 circle as one terminal cell, even in the C locale.
-      col=$((option_left > 0 ? option_left - 1 : 0))
-      cell=$(( (row - 1) * COLUMNS + col ))
-      stars_text_char[$cell]='●' stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
-      stars_text_palette[$cell]=3
-    fi
-    printf -v text '%*d' "$number_width" "$((index + 1))"
-    text=" $text"
-    for ((col = 0; col < ${#text}; col++)); do
-      [[ ${text:col:1} == ' ' ]] && continue
-      (( option_left + col >= COLUMNS )) && break
-      cell=$(( (row - 1) * COLUMNS + option_left + col ))
-      stars_text_char[$cell]=${text:col:1} stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
-      stars_text_palette[$cell]=3
-    done
+    # Store each UTF-8 marker as one terminal cell, even in the C locale.
+    text='○'
+    (( index == selected )) && text='●'
+    cell=$(( (row - 1) * COLUMNS + option_left ))
+    stars_text_char[$cell]=$text stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
+    stars_text_palette[$cell]=3
   done
   for text in "${hint_rows[@]}"; do (( ${#text} > hint_width )) && hint_width=${#text}; done
   left=$(( (COLUMNS - hint_width) / 2 ))
@@ -325,7 +315,7 @@ function ez_stars_sweep() {
   local bottom=${stars_sweep_bottom:-$stars_bottom}
   stars_white=0 stars_color_cycle=$cycle
   if (( cycle > 0 && phase < stars_duration )); then
-    # Shared eased arrival keeps letters, digits, and stars in the same band.
+    # Shared eased arrival keeps letters, markers, and stars in the same band.
     distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
     arrival=${stars_sweep_arrival[distance]}
     local_phase=$((phase - arrival))
@@ -445,13 +435,16 @@ function ez_stars_render_span() {
     cell=$(((row - 1) * COLUMNS + col))
     rendered=${stars_cell_render[$cell]-}
     if [[ -n $rendered ]]; then
-      char=${rendered: -5:1}
-      prefix=${rendered:0:${#rendered}-5}
+      # Separate the whole glyph from its last SGR, without splitting UTF-8.
+      rendered=${rendered%$'\033[0m'}
+      char=${rendered##*$'\033['}
+      char=${char#*m}
+      prefix=${rendered:0:${#rendered}-${#char}}
       if [[ $prefix != "$active" ]]; then result+=$'\033[0m'"$prefix"; active=$prefix; fi
       result+=$char
     else
       # Preserve color across spaces to batch whole title/hint runs, but never
-      # extend a disabled digit's strikethrough into adjacent empty cells.
+      # extend a disabled marker's strikethrough into adjacent empty cells.
       if [[ $active == *$'\033[0;9m'* ]]; then result+=$'\033[0m'; active=''; fi
       result+=' '
     fi

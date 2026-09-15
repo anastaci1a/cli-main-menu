@@ -167,22 +167,22 @@ ez_stars_tick 2600
 [[ $(declare -p stars_hue_offset) == "$saved_hues" ]]
 printf 'PASS single births, sub-half-second delays, and stable per-star saturation\n'
 
-# Title and two-digit numbers sweep with the palette's complementary hue.
+# Title and markers sweep with the palette's complementary hue across scrolling.
 title_rows=('AB') COLUMNS=80 LINES=24 visible=3 option_left=30 option_right=46
 menu_enabled=([9]=1 [10]=0 [11]=1)
 ez_stars_layout 6 1 2 2
-ez_stars_text_layout 6 2 2 0 9 9 2
-title_cell=$((4 * 80 + 39)) number_cell=$((8 * 80 + 31)) disabled_cell=$((9 * 80 + 31))
-selector_cell=$((8 * 80 + 29))
-[[ ${stars_text_char[$selector_cell]} == '●' && ! ${stars_text_char[$((selector_cell + 1))]+present} ]]
-[[ ${stars_text_char[$title_cell]} == A && ${stars_text_char[$number_cell]} == 1 ]]
-[[ ${stars_text_style[$number_cell]} == 1 && ${stars_text_style[$disabled_cell]} == 9 ]]
+ez_stars_text_layout 6 2 2 0 9 9
+title_cell=$((4 * 80 + 39)) marker_cell=$((8 * 80 + 30)) disabled_cell=$((9 * 80 + 30))
+[[ ! ${stars_text_char[$((marker_cell - 1))]+present} && ! ${stars_text_char[$((marker_cell + 1))]+present} ]]
+[[ ${stars_text_char[$title_cell]} == A && ${stars_text_char[$marker_cell]} == '●' ]]
+[[ ${stars_text_char[$disabled_cell]} == '○' ]]
+[[ ${stars_text_style[$marker_cell]} == 1 && ${stars_text_style[$disabled_cell]} == 9 ]]
 [[ ${stars_text_fade[$disabled_cell]} == 60 ]]
 for cell in "${stars_cells[@]}"; do [[ ! ${stars_text_char[$cell]+present} ]]; done
 [[ ${stars_hue[3]} == $(((stars_hue[0] + (stars_hue[1] - stars_hue[0] + stars_hue[2] - stars_hue[0]) / 3 + 180) % 360)) ]]
 stars_next=999999
 ez_stars_tick 3999
-[[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$number_cell]%:*:*}" ]]
+[[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$marker_cell]%:*:*}" ]]
 original_accent=${stars_text_seen[$title_cell]}
 # At the title cell's white peak, disabled rows are still styled independently.
 distance=$(((39 * 1000 / 79 + (5 - stars_top) * 1000 / (stars_bottom - stars_top)) / 2))
@@ -191,23 +191,37 @@ ez_stars_tick "$((4000 + arrival + 60))"
 [[ ${stars_text_seen[$title_cell]} == '255;255;255:1:A' ]]
 ez_stars_tick 5000
 [[ ${stars_text_seen[$title_cell]} != "$original_accent" ]]
-[[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$number_cell]%:*:*}" ]]
-ez_stars_text_layout 6 2 2 0 9 11 2
-[[ ! ${stars_text_char[$selector_cell]+present} && ${stars_text_char[$((selector_cell + 2 * 80))]} == '●' ]]
-[[ ${stars_text_style[$number_cell]} == 0 && ${stars_text_style[$disabled_cell]} == 9 ]]
+[[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$marker_cell]%:*:*}" ]]
+ez_stars_text_layout 6 2 2 0 9 11
+[[ ${stars_text_char[$marker_cell]} == '○' && ${stars_text_char[$((marker_cell + 2 * 80))]} == '●' ]]
+[[ ${stars_text_style[$marker_cell]} == 0 && ${stars_text_style[$disabled_cell]} == 9 ]]
 ez_stars_tick 5100
-[[ ${stars_text_seen[$number_cell]} == *':0:1' ]]
+[[ ${stars_text_seen[$marker_cell]} == *':0:○' ]]
 EZ_MENU_TITLE='A compact title'
-ez_stars_text_layout 6 15 2 1 9 11 2
+ez_stars_text_layout 6 15 2 1 9 11
 [[ ${#stars_text_char[@]} -gt 8 ]]
-printf 'PASS complementary title/numbers, shared sweep, scrolling, and disabled/selected styles\n'
+printf 'PASS complementary circle markers, shared sweep, scrolling, and disabled/selected styles\n'
+
+# Markers stay one column wide as the option count grows, including in C locale.
+(
+  COLUMNS=80 menu_enabled=() menu_disabled_notes=()
+  labels=()
+  for ((index = 0; index < 100; index++)); do labels+=(Entry); done
+  for count in 3 10 100; do
+    [[ $(ez_menu_option_layout "${labels[@]:0:count}") == '1 5 7 36 37' ]]
+  done
+  prefix=$'\033[0;0m\033[38;2;1;2;3m'
+  stars_cell_render=([0]="$prefix○$C_RESET" [1]="$prefix○$C_RESET" [2]="$prefix●$C_RESET" [3]="${prefix}m$C_RESET")
+  [[ $(ez_stars_render_span 1 0 4) == "$C_RESET$prefix○○●m$C_RESET" ]]
+)
+printf 'PASS fixed marker columns and intact UTF-8 glyphs in batched redraws\n'
 
 # Wrapped hints extend the spatial sweep and retain a dimmer, softer palette.
 for COLUMNS in 20 36 80; do
   LINES=30 visible=3 option_left=3 option_right=3 title_rows=('AB')
   mapfile -t hint_rows < <(ez_menu_hint_lines)
   ez_stars_layout 6 1 2 2
-  ez_stars_text_layout 6 2 2 0 0 0 1
+  ez_stars_text_layout 6 2 2 0 0 0
   [[ $stars_sweep_bottom == $((6 + visible + 5 + ${#hint_rows[@]})) ]]
   hint_cell=''
   for cell in "${!stars_text_char[@]}"; do

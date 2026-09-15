@@ -67,6 +67,7 @@ print "PASS arrows during redraw and queued repeats stay silent; terminal modes 
 start_case('chooser');
 expect(qr/Up\/Down: move/,'initial menu');
 die 'selected option is not bold' unless $buf =~ /\e\[1mOne/;
+die 'animated circle markers missing' unless plain($buf) =~ /● One/ && plain($buf) =~ /○ Two/;
 my @before=($buf =~ /(\d\d:\d\d:\d\d)/g);
 my $idle_marker=length $buf;
 pump(2.2);
@@ -95,6 +96,7 @@ print "PASS clock updates avoid full redraws and original-color underlays\n";
 start_case('static');
 expect(qr/Up\/Down: move/,'static fallback menu');
 die 'static mode emitted an animation overlay' if $buf =~ /\e\[\d+;\d+H\e\[38;2;/;
+die 'static circle markers missing' unless plain($buf) =~ /● One/ && plain($buf) =~ /○ Two/;
 send_keys("\e[A\n");
 expect(qr/SELECTED=2 STATUS=0/,'static navigation');
 finish();

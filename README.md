@@ -85,7 +85,7 @@ dimensions, so changing its length does not require editing the renderer.
 
 Animations run in the selector at a target of 20 frames per second, updating
 only changed star and accent cells between foreground redraws. No background worker or
-extra runtime dependency is needed. The title, option block, arrow, hints, and
+extra runtime dependency is needed. The title, option block, markers, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
 Twinkles start one at a time, with random opportunities spaced 1–333 ms apart
@@ -113,10 +113,9 @@ Stars share one central hue, with stable offsets in a 60° total range (±30°).
 The offsets approximate a Gaussian distribution with a 10° standard deviation,
 so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
-The title and option numbers
-(including the selection arrow) join the same sweep with a shared hue 180°
+The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-70° per sweep. Title/selection bolding and disabled-number strike/dimming remain
+70° per sweep. Title/selection bolding and disabled-marker strike/dimming remain
 intact; option labels keep their normal styling. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
 During each sweep the full-width status background eases from
@@ -138,7 +137,7 @@ EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
-EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/number hue
+EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
 ```
 
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the
@@ -183,7 +182,10 @@ goes to stderr; stdout returns the selected zero-based index.
   `codex --dangerously-bypass-approvals-and-sandbox`.
 - Jobs is disabled when this shell has no stopped jobs. When available, it lists
   running and stopped shell jobs and offers foreground/termination actions.
-- Disabled Jobs has a dark purple struck number and a dark gray struck label;
+- Interactive options use ○, changing to ● in place when selected. The marker
+  column stays the same width for any number of options. The non-TTY fallback
+  retains numbers for typed selection.
+- Disabled Jobs has a dark purple struck marker and a dark gray struck label;
   its `(no stopped jobs)` explanation is not struck through.
 - The menu uses an alternate screen and repairs on focus/resize and periodically.
   It restores terminal modes before launching an action or returning to the shell.

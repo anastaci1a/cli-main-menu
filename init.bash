@@ -11,6 +11,7 @@ _ez_cli_load() {
   fi
   source -- "$cli_dir/font.bash" || return
   source -- "$cli_dir/render.bash" || return
+  source -- "$cli_dir/stars.bash" || return
   source -- "$cli_dir/actions.bash" || return
   source -- "$cli_dir/select.bash" || return
   source -- "$cli_dir/menu.bash" || return

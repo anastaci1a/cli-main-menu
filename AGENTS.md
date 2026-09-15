@@ -22,8 +22,11 @@
   whole left-aligned block, reserving space for the selection arrow.
 - Keep full-width status/stars, centered title/hints, responsive hint grouping,
   disabled styling, and all-or-nothing disabled explanations.
-- Cache star positions/colors across ticks, navigation, focus, and Ctrl-L.
-  Recompute geometry on resize; preserve the clear text gutter and downward fade.
+- Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
+  geometry on resize; preserve the text mask and downward fade even at peak white.
+- Twinkles permanently replace their base stars, finish before sweeps, and fade
+  out more slowly than they brighten. Animation updates must not launch processes
+  per star/frame, alter job control, or leave a background worker after exit.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Disabled options must be skipped in both directions and refused by the numeric
   fallback. A fully disabled list must terminate without looping forever.
@@ -37,6 +40,8 @@
 - Run `bash tests/smoke.bash` after structural/loading changes.
 - Run `perl tests/terminal.pl` when changing rendering, navigation, or actions.
   If extending behavior, add focused coverage for the relevant failure mode.
+- Run `bash tests/stars.bash` for animation changes; use explicit simulated times
+  to check effects without flaky random timing or sleeps.
 - Stub tmux/Codex and create isolated temporary jobs for checks. Do not attach,
   resume, or terminate the user's real sessions/jobs while testing.
 - Check `git diff --check` and inspect the staged changes before committing.

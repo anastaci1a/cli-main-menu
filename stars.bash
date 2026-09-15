@@ -24,6 +24,14 @@ function ez_stars_init() {
   stars_sat_max=${EZ_MENU_STAR_SATURATION_MAX:-800}
   stars_accent_offset=${EZ_MENU_SWEEP_ACCENT_OFFSET:-180}
   stars_hue_spread=${EZ_MENU_STAR_HUE_SPREAD:-60}
+  stars_twinkle_advance=${EZ_MENU_TWINKLE_ADVANCE_MS:-500}
+  stars_twinkle_rate=${EZ_MENU_TWINKLE_RATE_PERCENT:-150}
+  [[ $stars_twinkle_advance =~ ^[0-9]{1,5}$ ]] || stars_twinkle_advance=500
+  stars_twinkle_advance=$((10#$stars_twinkle_advance))
+  [[ $stars_twinkle_rate =~ ^[1-9][0-9]{0,3}$ ]] || stars_twinkle_rate=150
+  (( stars_twinkle_rate > 1000 )) && stars_twinkle_rate=1000
+  # Scale opportunity frequency, preserving the envelope's peak/trough ratio.
+  stars_twinkle_delay=$((50000 / stars_twinkle_rate))
   [[ $stars_hue_spread =~ ^[0-9]{1,3}$ ]] || stars_hue_spread=60
   stars_hue_spread=$((10#$stars_hue_spread))
   (( stars_hue_spread > 360 )) && stars_hue_spread=360
@@ -83,7 +91,7 @@ function ez_stars_init() {
   stars_sat[3]=700 stars_value[3]=255
   stars_hue[4]=${stars_hue[3]} stars_sat[4]=350 stars_value[4]=255
   ez_stars_now
-  stars_origin=$stars_now stars_next=$((1 + RANDOM % 500)) stars_cache_cycle=-1
+  stars_origin=$stars_now stars_next=$((1 + (RANDOM * 32768 + RANDOM) % stars_twinkle_delay)) stars_cache_cycle=-1
   stars_render_cycle=-1 stars_was_sweeping=0
 }
 
@@ -312,10 +320,10 @@ function ez_stars_sweep() {
 
 function ez_stars_twinkle_weight() {
   local elapsed=$1 phase position product sine
-  # Raised sine-squared envelope: its trough is centered on the shimmer.
+  # Advance the entire sine-squared envelope: both its fall and rise occur sooner.
   # Bhaskara's sine approximation avoids a process or floating-point work per
   # frame. Weight stays between 20% and 100%, with smooth, periodic shoulders.
-  phase=$(((elapsed - stars_duration / 2 + stars_period) % stars_period))
+  phase=$(((elapsed - stars_duration / 2 + stars_twinkle_advance + stars_period) % stars_period))
   position=$((phase * 1000 / stars_period))
   product=$((position * (1000 - position)))
   sine=$((16000 * product / (5000000 - 4 * product)))
@@ -333,7 +341,7 @@ function ez_stars_tick() {
   if (( cycle != stars_cache_cycle )); then
     stars_rgb_cache=() stars_cache_cycle=$cycle
   fi
-  # Keep the same random opportunities, weighted smoothly around the sweep.
+  # Faster random opportunities keep the same smooth probability envelope.
   if (( elapsed >= stars_next )); then
     ez_stars_twinkle_weight "$elapsed"
     if (( count && RANDOM % 1000 < stars_spawn_weight )); then
@@ -347,7 +355,7 @@ function ez_stars_tick() {
       done
     fi
     # One birth at most per frame; never catch up missed time with a burst.
-    stars_next=$((elapsed + 1 + RANDOM % 500))
+    stars_next=$((elapsed + 1 + (RANDOM * 32768 + RANDOM) % stars_twinkle_delay))
   fi
   for cell in "${!stars_char[@]}"; do
     # Between effects, unchanged stars cost no color conversion or terminal I/O.

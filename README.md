@@ -88,13 +88,16 @@ only changed star and accent cells between foreground redraws. No background wor
 extra runtime dependency is needed. The title, option block, arrow, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
-Twinkles start one at a time, with random opportunities spaced 1–500 ms apart.
+Twinkles start one at a time, with random opportunities spaced 1–333 ms apart
+at the default 1.5× rate. The rate setting scales opportunity frequency
+multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
 then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
 permanently. A smooth, sine-shaped probability ranges from 100% between sweeps
-to 20% at the shimmer midpoint. Births become rarer during the sweep, while
-existing twinkles keep fading through it.
+to 20% at its trough. The entire curve leads the shimmer midpoint by 500 ms,
+so births lessen sooner and recover earlier. Births remain rarer during the
+sweep, while existing twinkles keep fading through it.
 
 Every four seconds, a one-second diagonal band travels from the top left to the
 bottom right. Stars quickly approach white, then slowly regain saturation with
@@ -128,6 +131,8 @@ Override these settings in ignored `config.bash`, then source `.bashrc`:
 ```bash
 EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
+EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
+EZ_MENU_TWINKLE_RATE_PERCENT=150 # 100 = original rate; 200 = 2x (range 1–1000)
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%

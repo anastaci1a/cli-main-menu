@@ -3,6 +3,8 @@
 # Copy this file to config.bash for personal settings, then source ~/.bashrc.
 EZ_MENU_TITLE='MAIN MENU'
 EZ_MENU_ANIMATE_STARS=1
+EZ_MENU_TWINKLE_ADVANCE_MS=500  # positive values move the probability cycle earlier
+EZ_MENU_TWINKLE_RATE_PERCENT=150 # 100 = original rate; 150 = 1.5x
 EZ_MENU_SWEEP_INTERVAL_MS=4000
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70

@@ -11,6 +11,7 @@ declare -a hint_rows=()
 EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
 EZ_MENU_STAR_SATURATION_MAX=800 EZ_MENU_SWEEP_ACCENT_OFFSET=180
 EZ_MENU_STAR_HUE_SPREAD=60
+EZ_MENU_TWINKLE_ADVANCE_MS=500 EZ_MENU_TWINKLE_RATE_PERCENT=150
 ez_stars_init
 
 # A repeatable sample must cluster near its center, not uniformly at the edges.
@@ -113,13 +114,13 @@ ez_stars_tick 1100
 printf 'PASS fast eased twinkle, slow fade, and permanent collision removal\n'
 
 # The probability envelope is periodic, smooth and nonzero through the sweep.
-ez_stars_twinkle_weight 4000
+ez_stars_twinkle_weight 3500
 edge_weight=$stars_spawn_weight
-ez_stars_twinkle_weight 4500
+ez_stars_twinkle_weight 4000
 [[ $stars_spawn_weight == 200 ]]
-ez_stars_twinkle_weight 5000
+ez_stars_twinkle_weight 4500
 [[ $stars_spawn_weight == "$edge_weight" ]]
-ez_stars_twinkle_weight 6500
+ez_stars_twinkle_weight 6000
 [[ $stars_spawn_weight == 1000 ]]
 previous=-1
 for ((instant = 0; instant <= 8000; instant += 10)); do
@@ -130,14 +131,14 @@ for ((instant = 0; instant <= 8000; instant += 10)); do
 done
 RANDOM=1801
 during=0 between=0
-for instant in 4500 6500; do
+for instant in 4000 6000; do
   for ((trial = 0; trial < 200; trial++)); do
     stars_char=() stars_birth=() stars_next=0
     ez_stars_tick "$instant"
     if [[ ${stars_birth[160]+present} ]]; then
-      if (( instant == 4500 )); then during=$((during + 1)); else between=$((between + 1)); fi
+      if (( instant == 4000 )); then during=$((during + 1)); else between=$((between + 1)); fi
     fi
-    (( stars_next > instant && stars_next <= instant + 500 ))
+    (( stars_next > instant && stars_next <= instant + 333 ))
   done
 done
 (( during > 10 && during < 80 && between == 200 ))
@@ -151,12 +152,12 @@ printf 'PASS smooth weighted births, fewer during sweeps, and uninterrupted over
 
 # Deadlines create exactly one star when space is available, even after a pause.
 stars_char=() stars_birth=() stars_cells=(160 161 162 163 164 165 166 167)
-instant=2500
+instant=2000
 for ((trial = 0; trial < 8; trial++)); do
   before=${#stars_birth[@]} stars_next=0
   ez_stars_tick "$instant"
   (( ${#stars_birth[@]} == before + 1 ))
-  (( stars_next > instant && stars_next <= instant + 500 ))
+  (( stars_next > instant && stars_next <= instant + 333 ))
 done
 saved_saturation=$(declare -p stars_saturation)
 saved_hues=$(declare -p stars_hue_offset)
@@ -241,6 +242,38 @@ printf 'PASS responsive hint sweep and linear status-bar color endpoints/midpoin
 
 # Invalid settings cannot create division by zero or overlapping sweeps.
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1
+EZ_MENU_TWINKLE_ADVANCE_MS=invalid EZ_MENU_TWINKLE_RATE_PERCENT=0
 ez_stars_init
 [[ $stars_period == 4000 && $stars_duration == 1000 && $stars_step == 70 ]]
+[[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 150 && $stars_twinkle_delay == 333 ]]
 printf 'PASS invalid animation settings use safe defaults\n'
+
+# Advancing translates the same curve; the rate changes waiting times, not weights.
+for instant in 0 500 1500 3000 3999; do
+  stars_twinkle_advance=0
+  ez_stars_twinkle_weight "$((instant + 500))"
+  baseline_weight=$stars_spawn_weight
+  stars_twinkle_advance=500
+  ez_stars_twinkle_weight "$instant"
+  [[ $stars_spawn_weight == "$baseline_weight" ]]
+done
+for rate in 100 200; do
+  EZ_MENU_TWINKLE_RATE_PERCENT=$rate
+  ez_stars_init
+  stars_cells=() stars_char=() stars_text_char=()
+  RANDOM=2103
+  total_wait=0
+  for ((trial = 0; trial < 1000; trial++)); do
+    stars_next=0
+    ez_stars_tick 5000
+    total_wait=$((total_wait + stars_next - 5000))
+  done
+  if (( rate == 100 )); then
+    base_wait=$total_wait baseline_weight=$stars_spawn_weight
+  else
+    fast_wait=$total_wait
+    [[ $stars_spawn_weight == "$baseline_weight" ]]
+  fi
+done
+(( fast_wait * 100 > base_wait * 45 && fast_wait * 100 < base_wait * 55 ))
+printf 'PASS earlier probability cycle and multiplicative spawn frequency\n'

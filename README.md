@@ -100,7 +100,7 @@ so births lessen sooner and recover earlier. Births remain rarer during the
 sweep, while existing twinkles keep fading through it.
 
 Every four seconds, a one-second diagonal band travels from the top left to the
-bottom right with ease-in/out movement: slow at each end and faster through the
+bottom right with pronounced cubic ease-in/out: slow at each end and faster through the
 middle. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.

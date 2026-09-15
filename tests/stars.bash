@@ -232,17 +232,17 @@ to_r=$stars_r to_g=$stars_g to_b=$stars_b
 ez_stars_bar_color 4000
 [[ $stars_r == "$from_r" && $stars_g == "$from_g" && $stars_b == "$from_b" ]]
 ez_stars_bar_color 4250
-(( stars_r == from_r + (to_r - from_r) * 156 / 1000 ))
-(( stars_g == from_g + (to_g - from_g) * 156 / 1000 ))
-(( stars_b == from_b + (to_b - from_b) * 156 / 1000 ))
+(( stars_r == from_r + (to_r - from_r) * 62 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 62 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 62 / 1000 ))
 ez_stars_bar_color 4500
 (( stars_r == from_r + (to_r - from_r) / 2 ))
 (( stars_g == from_g + (to_g - from_g) / 2 ))
 (( stars_b == from_b + (to_b - from_b) / 2 ))
 ez_stars_bar_color 4750
-(( stars_r == from_r + (to_r - from_r) * 843 / 1000 ))
-(( stars_g == from_g + (to_g - from_g) * 843 / 1000 ))
-(( stars_b == from_b + (to_b - from_b) * 843 / 1000 ))
+(( stars_r == from_r + (to_r - from_r) * 937 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 937 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 937 / 1000 ))
 ez_stars_bar_color 5000
 [[ $stars_r == "$to_r" && $stars_g == "$to_g" && $stars_b == "$to_b" ]]
 settled_bg=$stars_bar_bg
@@ -295,7 +295,7 @@ ez_stars_sweep 1 50 1 200
 ez_stars_sweep 101 50 1 500
 (( stars_white > 0 ))
 # Arrival changes; each position still takes 60 ms to peak and 240 ms to fade.
-for position in '1 50 228' '101 50 471'; do
+for position in '1 50 277' '101 50 422'; do
   read -r row col arrival <<< "$position"
   ez_stars_sweep "$row" "$col" 1 "$((arrival + 60))"
   [[ $stars_white == 1000 ]]
@@ -308,7 +308,7 @@ for duration in 300 1000 2500; do
   travel=$((duration * 7 / 10)) previous=-1
   [[ ${stars_sweep_arrival[0]} == 0 && ${stars_sweep_arrival[1000]} == "$travel" ]]
   (( stars_sweep_arrival[500] == travel / 2 ))
-  (( stars_sweep_arrival[250] > travel / 4 && stars_sweep_arrival[750] < travel * 3 / 4 ))
+  (( stars_sweep_arrival[250] > travel * 3 / 8 && stars_sweep_arrival[750] < travel * 5 / 8 ))
   for arrival in "${stars_sweep_arrival[@]}"; do
     (( arrival >= previous && arrival <= travel ))
     previous=$arrival

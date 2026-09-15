@@ -46,12 +46,12 @@ function ez_stars_init() {
   stars_accent_offset=$((10#$stars_accent_offset))
   (( stars_duration < 300 )) && stars_duration=300
   (( stars_period < stars_duration + 1800 )) && stars_period=$((stars_duration + 1800))
-  # Invert smoothstep once: each diagonal position gets its arrival time for
+  # Invert cubic ease-in/out once: each diagonal position gets its arrival time for
   # eased movement, while individual flashes retain their real-time durations.
   local progress distance=0 travel=$((stars_duration * 7 / 10))
   stars_sweep_arrival=()
   for ((progress = 0; progress <= 1000; progress++)); do
-    ez_stars_ease "$progress"
+    ez_stars_sweep_ease "$progress"
     while (( distance <= stars_eased )); do
       stars_sweep_arrival[distance]=$((travel * progress / 1000))
       distance=$((distance + 1))
@@ -267,6 +267,19 @@ function ez_stars_ease() {
   stars_eased=$((amount * amount * (3000 - 2 * amount) / 1000000))
 }
 
+# Stronger movement curve for the sweep, separate from individual light fades.
+function ez_stars_sweep_ease() {
+  local amount=$1
+  (( amount < 0 )) && amount=0
+  (( amount > 1000 )) && amount=1000
+  if (( amount <= 500 )); then
+    stars_eased=$((4 * amount * amount * amount / 1000000))
+  else
+    amount=$((1000 - amount))
+    stars_eased=$(((1000000000 - 4 * amount * amount * amount) / 1000000))
+  fi
+}
+
 function ez_stars_color() {
   local palette=$1 cycle=$2 white=$3 fade=$4 intensity=$5
   local saturation=${6:-${stars_sat[palette]}}
@@ -453,7 +466,7 @@ function ez_stars_bar_color() {
     ez_stars_color 4 "$((cycle - 1))" 0 55 1000
     from_red=$stars_r from_green=$stars_g from_blue=$stars_b
     ez_stars_color 4 "$cycle" 0 55 1000
-    ez_stars_ease "$((phase * 1000 / stars_duration))"
+    ez_stars_sweep_ease "$((phase * 1000 / stars_duration))"
     fraction=$stars_eased
     stars_r=$((from_red + (stars_r - from_red) * fraction / 1000))
     stars_g=$((from_green + (stars_g - from_green) * fraction / 1000))

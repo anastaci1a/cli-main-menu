@@ -104,6 +104,8 @@ bottom right with pronounced cubic ease-in/out: slow at each end and faster thro
 middle. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
+Stars and title characters briefly turn bold around their own near-white sweep
+peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
 the terminal has room. The row fade stretches from 65% at the first option to
 5% at the field's last row. Text areas have clear gutters; stars remain sparse
@@ -115,8 +117,8 @@ so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
 The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-70° per sweep. Title/selection bolding and disabled-marker strike/dimming remain
-intact; option labels keep their normal styling. Control hints share the title
+70° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
+intact during the title's bold flash. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
 During each sweep the full-width status background eases from
 the previous settled hint color to the next, then holds that color.

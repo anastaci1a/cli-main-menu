@@ -191,7 +191,7 @@ function ez_stars_text_layout() {
   local row col cell line index text style fade hint_width=0 left=$(( (COLUMNS - title_width) / 2 ))
   local -a letters=("${title_rows[@]}")
   local -a old_cells=("${!stars_text_char[@]}")
-  stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=()
+  stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
   if (( compact )); then
     text=$(ez_menu_title_text)
     letters=("${text:0:COLUMNS}")
@@ -204,7 +204,8 @@ function ez_stars_text_layout() {
       [[ ${text:col:1} == ' ' ]] && continue
       (( left + col >= COLUMNS )) && break
       cell=$(( (row - 1) * COLUMNS + left + col ))
-      stars_text_char[$cell]=${text:col:1} stars_text_style[$cell]=1 stars_text_fade[$cell]=100
+      stars_text_char[$cell]=${text:col:1} stars_text_style[$cell]=0 stars_text_fade[$cell]=100
+      stars_text_flash[$cell]=1
       stars_text_palette[$cell]=3
     done
   done
@@ -346,7 +347,7 @@ function ez_stars_twinkle_weight() {
 }
 
 function ez_stars_tick() {
-  local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token piece
+  local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token piece style
   local index start count=${#stars_cells[@]}
   local sweeping=0 stable=0
   stars_output=''
@@ -376,7 +377,7 @@ function ez_stars_tick() {
     # Between effects, unchanged stars cost no color conversion or terminal I/O.
     if (( stable )) && [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} ]]; then continue; fi
     row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
-    char=${stars_char[$cell]} white=0 intensity=1000 color_cycle=$cycle
+    char=${stars_char[$cell]} white=0 intensity=1000 color_cycle=$cycle style=0
     if [[ ${stars_birth[$cell]+present} ]]; then
       age=$((elapsed - stars_birth[$cell]))
       if (( age >= 900 )); then
@@ -397,29 +398,32 @@ function ez_stars_tick() {
     fi
     if (( sweeping )); then
       ez_stars_sweep "$row" "$col" "$cycle" "$phase"
+      (( stars_white >= 900 )) && style=1
       # A crossing shimmer can desaturate a twinkle, but its own slow fade still
       # controls intensity and lifetime. There is no abrupt hue flip or cutoff.
       white=$((1000 - (1000 - white) * (1000 - stars_white) / 1000))
       color_cycle=$stars_color_cycle
     fi
     ez_stars_color "${stars_palette[$cell]}" "$color_cycle" "$white" "${stars_fade[row]}" "$intensity" "${stars_saturation[$cell]-}" "${stars_hue_offset[$cell]:-0}"
-    token="$stars_r;$stars_g;$stars_b:$char"
+    token="$stars_r;$stars_g;$stars_b:$style:$char"
     if [[ ${stars_seen[$cell]-} != "$token" ]]; then
-      printf -v piece '\033[%d;%dH\033[38;2;%d;%d;%dm%s' "$row" "$((col + 1))" "$stars_r" "$stars_g" "$stars_b" "$char"
+      printf -v piece '\033[%d;%dH\033[0;%sm\033[38;2;%d;%d;%dm%s' "$row" "$((col + 1))" "$style" "$stars_r" "$stars_g" "$stars_b" "$char"
       stars_output+=$piece stars_seen[$cell]=$token
-      printf -v 'stars_cell_render[$cell]' '\033[38;2;%d;%d;%dm%s\033[0m' "$stars_r" "$stars_g" "$stars_b" "$char"
+      printf -v 'stars_cell_render[$cell]' '\033[0;%sm\033[38;2;%d;%d;%dm%s\033[0m' "$style" "$stars_r" "$stars_g" "$stars_b" "$char"
     fi
   done
   for cell in "${!stars_text_char[@]}"; do
     if (( stable )) && [[ ${stars_text_seen[$cell]+present} ]]; then continue; fi
     row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
     ez_stars_sweep "$row" "$col" "$cycle" "$phase"
+    style=${stars_text_style[$cell]}
+    if [[ ${stars_text_flash[$cell]:-0} == 1 ]] && (( stars_white >= 900 )); then style=1; fi
     ez_stars_color "${stars_text_palette[$cell]}" "$stars_color_cycle" "$stars_white" "${stars_text_fade[$cell]}" 1000
-    token="$stars_r;$stars_g;$stars_b:${stars_text_style[$cell]}:${stars_text_char[$cell]}"
+    token="$stars_r;$stars_g;$stars_b:$style:${stars_text_char[$cell]}"
     if [[ ${stars_text_seen[$cell]-} != "$token" ]]; then
-      printf -v piece '\033[%d;%dH\033[0;%sm\033[38;2;%d;%d;%dm%s' "$row" "$((col + 1))" "${stars_text_style[$cell]}" "$stars_r" "$stars_g" "$stars_b" "${stars_text_char[$cell]}"
+      printf -v piece '\033[%d;%dH\033[0;%sm\033[38;2;%d;%d;%dm%s' "$row" "$((col + 1))" "$style" "$stars_r" "$stars_g" "$stars_b" "${stars_text_char[$cell]}"
       stars_output+=$piece stars_text_seen[$cell]=$token
-      printf -v 'stars_cell_render[$cell]' '\033[0;%sm\033[38;2;%d;%d;%dm%s\033[0m' "${stars_text_style[$cell]}" "$stars_r" "$stars_g" "$stars_b" "${stars_text_char[$cell]}"
+      printf -v 'stars_cell_render[$cell]' '\033[0;%sm\033[38;2;%d;%d;%dm%s\033[0m' "$style" "$stars_r" "$stars_g" "$stars_b" "${stars_text_char[$cell]}"
     fi
   done
   stars_render_cycle=$cycle stars_was_sweeping=$sweeping

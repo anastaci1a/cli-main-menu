@@ -6,6 +6,7 @@ source -- "$cli_dir/init.bash"
 declare -a stars_cells stars_fade stars_hue stars_sat stars_value
 declare -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
 declare -A stars_text_char stars_text_style stars_text_fade stars_text_seen
+declare -A stars_text_flash
 declare -A stars_hue_offset stars_cell_render stars_text_palette
 declare -a hint_rows=()
 EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
@@ -77,15 +78,20 @@ stars_next=999999
 ez_stars_tick 3999
 original=${stars_seen[160]}
 ez_stars_tick 4060
-[[ ${stars_seen[160]} == '255;255;255:.' ]]
+[[ ${stars_seen[160]} == '255;255;255:1:.' ]]
+[[ ${stars_cell_render[160]} == $'\033[0;1m'* ]]
 [[ ${stars_seen[239]} == "${original%:*}:+" ]]
+ez_stars_tick 4080
+[[ ${stars_seen[160]} == *':1:.' ]]
+ez_stars_tick 4120
+[[ ${stars_seen[160]} == *':0:.' && ${stars_cell_render[160]} == $'\033[0;0m'* ]]
 ez_stars_tick 4410
-[[ ${stars_seen[239]} == '255;255;255:+' ]]
+[[ ${stars_seen[239]} == '255;255;255:1:+' ]]
 ez_stars_tick 4760
-[[ ${stars_seen[1279]} == '12;12;12:*' ]]
+[[ ${stars_seen[1279]} == '12;12;12:1:*' ]]
 ez_stars_tick 5000
 rotated=${stars_seen[160]}
-[[ $rotated != "$original" && $rotated != '255;255;255:.' ]]
+[[ $rotated != "$original" && $rotated == *':0:.' ]]
 ez_stars_tick 5100
 [[ -z $stars_output && ${stars_seen[160]} == "$rotated" ]]
 ez_stars_tick 9000
@@ -98,9 +104,9 @@ stars_cells=(160) stars_char=([160]='*') stars_palette=([160]=0)
 stars_birth=() stars_seen=() stars_next=999999
 ez_stars_spawn 160 100
 ez_stars_tick 100
-[[ ${stars_seen[160]} == '0;0;0:.' ]]
+[[ ${stars_seen[160]} == '0;0;0:0:.' ]]
 ez_stars_tick 220
-[[ ${stars_seen[160]} == '255;255;255:*' ]]
+[[ ${stars_seen[160]} == '255;255;255:0:*' ]]
 ez_stars_tick 340
 [[ $stars_r -gt 200 && $stars_r -lt 255 ]]
 ez_stars_tick 800
@@ -183,14 +189,18 @@ for cell in "${stars_cells[@]}"; do [[ ! ${stars_text_char[$cell]+present} ]]; d
 stars_next=999999
 ez_stars_tick 3999
 [[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$marker_cell]%:*:*}" ]]
+[[ ${stars_text_seen[$title_cell]} == *':0:A' && ${stars_text_seen[$marker_cell]} == *':1:●' ]]
 original_accent=${stars_text_seen[$title_cell]}
 # At the title cell's white peak, disabled rows are still styled independently.
 distance=$(((39 * 1000 / 79 + (5 - stars_top) * 1000 / (stars_bottom - stars_top)) / 2))
 arrival=${stars_sweep_arrival[distance]}
 ez_stars_tick "$((4000 + arrival + 60))"
 [[ ${stars_text_seen[$title_cell]} == '255;255;255:1:A' ]]
+[[ ${stars_cell_render[$title_cell]} == $'\033[0;1m'* ]]
 ez_stars_tick 5000
 [[ ${stars_text_seen[$title_cell]} != "$original_accent" ]]
+[[ ${stars_text_seen[$title_cell]} == *':0:A' && ${stars_text_seen[$marker_cell]} == *':1:●' ]]
+[[ ${stars_text_seen[$disabled_cell]} == *':9:○' ]]
 [[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$marker_cell]%:*:*}" ]]
 ez_stars_text_layout 6 2 2 0 9 11
 [[ ${stars_text_char[$marker_cell]} == '○' && ${stars_text_char[$((marker_cell + 2 * 80))]} == '●' ]]

@@ -42,6 +42,9 @@
 - Ease the diagonal's movement in and out while preserving individual flash
   durations. Precompute arrival times instead of solving easing for every cell/frame.
 - Status backgrounds ease to the settled hint color during each sweep.
+- Bold stars and title cells briefly at their own near-white sweep peaks, then
+  restore normal weight. Keep selected-option bolding and disabled styling intact.
+  Include transient weight in cached cells so redraws match animation frames.
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.

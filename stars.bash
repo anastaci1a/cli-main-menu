@@ -25,10 +25,10 @@ function ez_stars_init() {
   stars_accent_offset=${EZ_MENU_SWEEP_ACCENT_OFFSET:-180}
   stars_hue_spread=${EZ_MENU_STAR_HUE_SPREAD:-60}
   stars_twinkle_advance=${EZ_MENU_TWINKLE_ADVANCE_MS:-500}
-  stars_twinkle_rate=${EZ_MENU_TWINKLE_RATE_PERCENT:-150}
+  stars_twinkle_rate=${EZ_MENU_TWINKLE_RATE_PERCENT:-200}
   [[ $stars_twinkle_advance =~ ^[0-9]{1,5}$ ]] || stars_twinkle_advance=500
   stars_twinkle_advance=$((10#$stars_twinkle_advance))
-  [[ $stars_twinkle_rate =~ ^[1-9][0-9]{0,3}$ ]] || stars_twinkle_rate=150
+  [[ $stars_twinkle_rate =~ ^[1-9][0-9]{0,3}$ ]] || stars_twinkle_rate=200
   (( stars_twinkle_rate > 1000 )) && stars_twinkle_rate=1000
   # Scale opportunity frequency, preserving the envelope's peak/trough ratio.
   stars_twinkle_delay=$((50000 / stars_twinkle_rate))

@@ -11,7 +11,7 @@ declare -a hint_rows=()
 EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
 EZ_MENU_STAR_SATURATION_MAX=800 EZ_MENU_SWEEP_ACCENT_OFFSET=180
 EZ_MENU_STAR_HUE_SPREAD=60
-EZ_MENU_TWINKLE_ADVANCE_MS=500 EZ_MENU_TWINKLE_RATE_PERCENT=150
+EZ_MENU_TWINKLE_ADVANCE_MS=500 EZ_MENU_TWINKLE_RATE_PERCENT=200
 ez_stars_init
 
 # A repeatable sample must cluster near its center, not uniformly at the edges.
@@ -138,7 +138,7 @@ for instant in 4000 6000; do
     if [[ ${stars_birth[160]+present} ]]; then
       if (( instant == 4000 )); then during=$((during + 1)); else between=$((between + 1)); fi
     fi
-    (( stars_next > instant && stars_next <= instant + 333 ))
+    (( stars_next > instant && stars_next <= instant + 250 ))
   done
 done
 (( during > 10 && during < 80 && between == 200 ))
@@ -157,7 +157,7 @@ for ((trial = 0; trial < 8; trial++)); do
   before=${#stars_birth[@]} stars_next=0
   ez_stars_tick "$instant"
   (( ${#stars_birth[@]} == before + 1 ))
-  (( stars_next > instant && stars_next <= instant + 333 ))
+  (( stars_next > instant && stars_next <= instant + 250 ))
 done
 saved_saturation=$(declare -p stars_saturation)
 saved_hues=$(declare -p stars_hue_offset)
@@ -269,7 +269,7 @@ EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STE
 EZ_MENU_TWINKLE_ADVANCE_MS=invalid EZ_MENU_TWINKLE_RATE_PERCENT=0
 ez_stars_init
 [[ $stars_period == 4000 && $stars_duration == 1000 && $stars_step == 70 ]]
-[[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 150 && $stars_twinkle_delay == 333 ]]
+[[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 200 && $stars_twinkle_delay == 250 ]]
 printf 'PASS invalid animation settings use safe defaults\n'
 
 # Advancing translates the same curve; the rate changes waiting times, not weights.

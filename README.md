@@ -88,8 +88,8 @@ only changed star and accent cells between foreground redraws. No background wor
 extra runtime dependency is needed. The title, option block, markers, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
-Twinkles start one at a time, with random opportunities spaced 1–333 ms apart
-at the default 1.5× rate. The rate setting scales opportunity frequency
+Twinkles start one at a time, with random opportunities spaced 1–250 ms apart
+at the default 2× rate. The rate setting scales opportunity frequency
 multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
@@ -132,7 +132,7 @@ Override these settings in ignored `config.bash`, then source `.bashrc`:
 EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
-EZ_MENU_TWINKLE_RATE_PERCENT=150 # 100 = original rate; 200 = 2x (range 1–1000)
+EZ_MENU_TWINKLE_RATE_PERCENT=200 # 100 = original rate; 200 = 2x (range 1–1000)
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%

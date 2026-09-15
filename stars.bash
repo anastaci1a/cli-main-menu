@@ -195,8 +195,15 @@ function ez_stars_text_layout() {
     style=0 fade=100
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
     elif (( index == selected )); then style=1; fi
+    if (( index == selected )); then
+      # Store the UTF-8 circle as one terminal cell, even in the C locale.
+      col=$((option_left > 0 ? option_left - 1 : 0))
+      cell=$(( (row - 1) * COLUMNS + col ))
+      stars_text_char[$cell]='●' stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
+      stars_text_palette[$cell]=3
+    fi
     printf -v text '%*d' "$number_width" "$((index + 1))"
-    if (( index == selected )); then text=">$text"; else text=" $text"; fi
+    text=" $text"
     for ((col = 0; col < ${#text}; col++)); do
       [[ ${text:col:1} == ' ' ]] && continue
       (( option_left + col >= COLUMNS )) && break

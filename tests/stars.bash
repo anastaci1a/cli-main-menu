@@ -172,6 +172,8 @@ menu_enabled=([9]=1 [10]=0 [11]=1)
 ez_stars_layout 6 1 2 2
 ez_stars_text_layout 6 2 2 0 9 9 2
 title_cell=$((4 * 80 + 39)) number_cell=$((8 * 80 + 31)) disabled_cell=$((9 * 80 + 31))
+selector_cell=$((8 * 80 + 29))
+[[ ${stars_text_char[$selector_cell]} == '●' && ! ${stars_text_char[$((selector_cell + 1))]+present} ]]
 [[ ${stars_text_char[$title_cell]} == A && ${stars_text_char[$number_cell]} == 1 ]]
 [[ ${stars_text_style[$number_cell]} == 1 && ${stars_text_style[$disabled_cell]} == 9 ]]
 [[ ${stars_text_fade[$disabled_cell]} == 60 ]]
@@ -189,6 +191,7 @@ ez_stars_tick 5000
 [[ ${stars_text_seen[$title_cell]} != "$original_accent" ]]
 [[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$number_cell]%:*:*}" ]]
 ez_stars_text_layout 6 2 2 0 9 11 2
+[[ ! ${stars_text_char[$selector_cell]+present} && ${stars_text_char[$((selector_cell + 2 * 80))]} == '●' ]]
 [[ ${stars_text_style[$number_cell]} == 0 && ${stars_text_style[$disabled_cell]} == 9 ]]
 ez_stars_tick 5100
 [[ ${stars_text_seen[$number_cell]} == *':0:1' ]]

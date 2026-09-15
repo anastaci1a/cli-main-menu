@@ -157,7 +157,7 @@ function ez_menu_choose() (
             fi
             ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin" "$count"
           else
-            # Keep three clear cells beside the entire option block, including >.
+            # Keep clear gutter cells beside the option block and its selector.
             left_gutter=3 right_gutter=3
             (( left_gutter > option_left )) && left_gutter=$option_left
             (( right_gutter > option_right )) && right_gutter=$option_right

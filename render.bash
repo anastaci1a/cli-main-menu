@@ -176,7 +176,7 @@ function ez_menu_option_layout() {
 
 function ez_menu_draw() {
   local selected=$1 first=$2 visible=$3 index label pointer weight number_weight label_color label_padding
-  local number_color note note_text
+  local number_color note note_text pointer_padding
   local label_width number number_width option_block_width indent right_width hint hint_width=0 page
   local left_stars right_stars screen_row
   local -a labels hints
@@ -198,7 +198,7 @@ function ez_menu_draw() {
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then
       weight=$C_STRIKE number_weight=$C_STRIKE label_color=$C_DISABLED number_color=$C_DISABLED_NUMBER
     elif (( index == selected )); then
-      pointer='>' weight=$C_BOLD number_weight=$C_BOLD label_color=$C_WHITE
+      pointer='●' weight=$C_BOLD number_weight=$C_BOLD label_color=$C_WHITE
     fi
     if (( ${ez_stars_animated:-0} )); then
       screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
@@ -213,8 +213,14 @@ function ez_menu_draw() {
     right_stars=${menu_star_right[index-first]-}
     [[ -n $left_stars ]] || printf -v left_stars '%*s' "$indent" ''
     [[ -n $right_stars ]] || printf -v right_stars '%*s' "$right_width" ''
+    # Use one gutter cell for the selector without moving numbers or labels.
+    pointer_padding=''
+    if (( indent > 0 )); then
+      left_stars=${left_stars% }
+      pointer_padding=' '
+    fi
     printf '\r\033[2K%s%s%s%s%*d%s %s%s%s%s%s%s%s%s\r\n' \
-      "$left_stars" "$number_color" "$pointer" "$number_weight" "$number_width" "$number" "$C_RESET" \
+      "$left_stars" "$number_color" "$pointer$pointer_padding" "$number_weight" "$number_width" "$number" "$C_RESET" \
       "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding" "$right_stars"
   done
   if (( ${ez_stars_animated:-0} )); then

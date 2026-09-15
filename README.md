@@ -52,7 +52,7 @@ Requires Bash 4+, `date`, `stty`, and `clear`. Codex actions additionally need
 | `config.bash` | Optional personal title/color overrides; ignored by Git |
 | `font.bash` | Block lettering that adapts to the configured title |
 | `menu.bash` | Main menu entries and action dispatch |
-| `actions.bash` | New Terminal, Codex, Jobs, and placeholder actions |
+| `actions.bash` | New Terminal, Codex, and Jobs actions |
 | `render.bash` | Title, status, stars, geometry, and control hints |
 | `select.bash` | Arrow keys, disabled options, scrolling, focus, and resize handling |
 

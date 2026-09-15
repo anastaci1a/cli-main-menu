@@ -42,10 +42,6 @@ function ez_menu_codex() {
   tmux new-session -A -s codex -c "$resolved_dir" 'codex --dangerously-bypass-approvals-and-sandbox'
 }
 
-function ez_menu_idk() {
-  printf '  %sbruh moment%s\n\n' "$C_ORANGE" "$C_RESET"
-}
-
 function ez_menu_has_stopped_jobs() {
   [[ -n $(jobs -sp) ]]
 }

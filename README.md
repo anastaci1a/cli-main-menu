@@ -100,7 +100,8 @@ so births lessen sooner and recover earlier. Births remain rarer during the
 sweep, while existing twinkles keep fading through it.
 
 Every four seconds, a one-second diagonal band travels from the top left to the
-bottom right. Stars quickly approach white, then slowly regain saturation with
+bottom right with ease-in/out movement: slow at each end and faster through the
+middle. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
 The star field now reaches the control hints and up to two rows below them when
@@ -118,7 +119,7 @@ opposite the center of the star palette. Their baseline hue advances by the same
 70° per sweep. Title/selection bolding and disabled-number strike/dimming remain
 intact; option labels keep their normal styling. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
-During each sweep the full-width status background linearly interpolates from
+During each sweep the full-width status background eases from
 the previous settled hint color to the next, then holds that color.
 
 Clock ticks update the status bar alone; navigation repaints the option area.

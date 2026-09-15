@@ -46,6 +46,17 @@ function ez_stars_init() {
   stars_accent_offset=$((10#$stars_accent_offset))
   (( stars_duration < 300 )) && stars_duration=300
   (( stars_period < stars_duration + 1800 )) && stars_period=$((stars_duration + 1800))
+  # Invert smoothstep once: each diagonal position gets its arrival time for
+  # eased movement, while individual flashes retain their real-time durations.
+  local progress distance=0 travel=$((stars_duration * 7 / 10))
+  stars_sweep_arrival=()
+  for ((progress = 0; progress <= 1000; progress++)); do
+    ez_stars_ease "$progress"
+    while (( distance <= stars_eased )); do
+      stars_sweep_arrival[distance]=$((travel * progress / 1000))
+      distance=$((distance + 1))
+    done
+  done
   stars_hue=() stars_sat=() stars_value=() stars_rgb_cache=()
   for color in "$C_STAR_BLUE" "$C_STAR_LAVENDER" "$C_STAR_PINK"; do
     red=135 green=135 blue=175
@@ -297,12 +308,13 @@ function ez_stars_spawn() {
 function ez_stars_sweep() {
   local row=$1 col=$2 cycle=$3 phase=$4
   local travel=$((stars_duration * 7 / 10)) rise=$((stars_duration * 6 / 100))
-  local tail=$((stars_duration - travel - rise)) arrival local_phase
+  local tail=$((stars_duration - travel - rise)) distance arrival local_phase
   local bottom=${stars_sweep_bottom:-$stars_bottom}
   stars_white=0 stars_color_cycle=$cycle
   if (( cycle > 0 && phase < stars_duration )); then
-    # Shared spatial phase keeps letters, digits, and stars in the same band.
-    arrival=$((travel * (col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2000))
+    # Shared eased arrival keeps letters, digits, and stars in the same band.
+    distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
+    arrival=${stars_sweep_arrival[distance]}
     local_phase=$((phase - arrival))
     if (( local_phase < 0 )); then
       stars_color_cycle=$((cycle - 1))
@@ -441,7 +453,8 @@ function ez_stars_bar_color() {
     ez_stars_color 4 "$((cycle - 1))" 0 55 1000
     from_red=$stars_r from_green=$stars_g from_blue=$stars_b
     ez_stars_color 4 "$cycle" 0 55 1000
-    fraction=$((phase * 1000 / stars_duration))
+    ez_stars_ease "$((phase * 1000 / stars_duration))"
+    fraction=$stars_eased
     stars_r=$((from_red + (stars_r - from_red) * fraction / 1000))
     stars_g=$((from_green + (stars_g - from_green) * fraction / 1000))
     stars_b=$((from_blue + (stars_b - from_blue) * fraction / 1000))

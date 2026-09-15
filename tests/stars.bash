@@ -185,7 +185,8 @@ ez_stars_tick 3999
 [[ ${stars_text_seen[$title_cell]%:*:*} == "${stars_text_seen[$number_cell]%:*:*}" ]]
 original_accent=${stars_text_seen[$title_cell]}
 # At the title cell's white peak, disabled rows are still styled independently.
-arrival=$((700 * (39 * 1000 / 79 + (5 - stars_top) * 1000 / (stars_bottom - stars_top)) / 2000))
+distance=$(((39 * 1000 / 79 + (5 - stars_top) * 1000 / (stars_bottom - stars_top)) / 2))
+arrival=${stars_sweep_arrival[distance]}
 ez_stars_tick "$((4000 + arrival + 60))"
 [[ ${stars_text_seen[$title_cell]} == '255;255;255:1:A' ]]
 ez_stars_tick 5000
@@ -217,7 +218,8 @@ for COLUMNS in 20 36 80; do
   done
   [[ -n $hint_cell ]]
   row=$((hint_cell / COLUMNS + 1)) col=$((hint_cell % COLUMNS))
-  arrival=$((700 * (col * 1000 / (COLUMNS - 1) + (row - stars_top) * 1000 / (stars_sweep_bottom - stars_top)) / 2000))
+  distance=$(((col * 1000 / (COLUMNS - 1) + (row - stars_top) * 1000 / (stars_sweep_bottom - stars_top)) / 2))
+  arrival=${stars_sweep_arrival[distance]}
   stars_next=999999
   ez_stars_tick "$((4000 + arrival + 60))"
   [[ ${stars_text_seen[$hint_cell]} == '140;140;140:0:'* ]]
@@ -229,16 +231,24 @@ ez_stars_color 4 1 0 55 1000
 to_r=$stars_r to_g=$stars_g to_b=$stars_b
 ez_stars_bar_color 4000
 [[ $stars_r == "$from_r" && $stars_g == "$from_g" && $stars_b == "$from_b" ]]
+ez_stars_bar_color 4250
+(( stars_r == from_r + (to_r - from_r) * 156 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 156 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 156 / 1000 ))
 ez_stars_bar_color 4500
 (( stars_r == from_r + (to_r - from_r) / 2 ))
 (( stars_g == from_g + (to_g - from_g) / 2 ))
 (( stars_b == from_b + (to_b - from_b) / 2 ))
+ez_stars_bar_color 4750
+(( stars_r == from_r + (to_r - from_r) * 843 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 843 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 843 / 1000 ))
 ez_stars_bar_color 5000
 [[ $stars_r == "$to_r" && $stars_g == "$to_g" && $stars_b == "$to_b" ]]
 settled_bg=$stars_bar_bg
 ez_stars_bar_color 7000
 [[ $stars_bar_bg == "$settled_bg" ]]
-printf 'PASS responsive hint sweep and linear status-bar color endpoints/midpoint\n'
+printf 'PASS responsive hint sweep and eased status-bar colors\n'
 
 # Invalid settings cannot create division by zero or overlapping sweeps.
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1
@@ -277,3 +287,31 @@ for rate in 100 200; do
 done
 (( fast_wait * 100 > base_wait * 45 && fast_wait * 100 < base_wait * 55 ))
 printf 'PASS earlier probability cycle and multiplicative spawn frequency\n'
+
+# The front starts slowly, crosses the middle quickly, and slows at the end.
+COLUMNS=101 stars_top=1 stars_bottom=101 stars_sweep_bottom=101
+ez_stars_sweep 1 50 1 200
+[[ $stars_white == 0 && $stars_color_cycle == 0 ]]
+ez_stars_sweep 101 50 1 500
+(( stars_white > 0 ))
+# Arrival changes; each position still takes 60 ms to peak and 240 ms to fade.
+for position in '1 50 228' '101 50 471'; do
+  read -r row col arrival <<< "$position"
+  ez_stars_sweep "$row" "$col" 1 "$((arrival + 60))"
+  [[ $stars_white == 1000 ]]
+  ez_stars_sweep "$row" "$col" 1 "$((arrival + 300))"
+  [[ $stars_white == 0 && $stars_color_cycle == 1 ]]
+done
+for duration in 300 1000 2500; do
+  EZ_MENU_SWEEP_DURATION_MS=$duration
+  ez_stars_init
+  travel=$((duration * 7 / 10)) previous=-1
+  [[ ${stars_sweep_arrival[0]} == 0 && ${stars_sweep_arrival[1000]} == "$travel" ]]
+  (( stars_sweep_arrival[500] == travel / 2 ))
+  (( stars_sweep_arrival[250] > travel / 4 && stars_sweep_arrival[750] < travel * 3 / 4 ))
+  for arrival in "${stars_sweep_arrival[@]}"; do
+    (( arrival >= previous && arrival <= travel ))
+    previous=$arrival
+  done
+done
+printf 'PASS eased diagonal movement, unchanged flash durations, and scalable arrival times\n'

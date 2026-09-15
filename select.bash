@@ -21,7 +21,7 @@ function ez_menu_choose() (
   local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
-  local -a stars_cells stars_fade stars_hue stars_sat stars_value
+  local -a stars_cells stars_fade stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
   local -A stars_hue_offset stars_cell_render stars_text_palette

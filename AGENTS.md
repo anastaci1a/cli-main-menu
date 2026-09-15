@@ -38,7 +38,9 @@
   twinkles continue their fade and share the crossing white/hue treatment.
 - Sweep title/number/hint accents using the shared spatial phase and complementary
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
-- Status backgrounds interpolate to the settled hint color during each sweep.
+- Ease the diagonal's movement in and out while preserving individual flash
+  durations. Precompute arrival times instead of solving easing for every cell/frame.
+- Status backgrounds ease to the settled hint color during each sweep.
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.

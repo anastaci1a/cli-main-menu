@@ -31,6 +31,10 @@ function ez_menu_banner() {
           continue
         fi
       fi
+      if (( ${ez_stars_animated:-0} )); then
+        printf ' '
+        continue
+      fi
       star_index=$((RANDOM % ${#star_chars}))
       if [[ ${star_chars:star_index:1} == ' ' ]]; then
         printf ' '

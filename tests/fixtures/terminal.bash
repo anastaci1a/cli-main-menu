@@ -3,6 +3,8 @@ shopt -s expand_aliases
 source -- "$EZ_CLI_BASHRC"
 # Keep visual expectations independent of personal configuration.
 EZ_MENU_TITLE=SATELLITE
+EZ_MENU_ANIMATE_STARS=1
+EZ_MENU_SWEEP_INTERVAL_MS=4000 EZ_MENU_SWEEP_DURATION_MS=1000 EZ_MENU_SWEEP_HUE_STEP=70
 COLUMNS=80
 LINES=24
 clear() { :; }
@@ -17,7 +19,8 @@ case $1 in
   menu)
     ez_select
     ;;
-  chooser)
+  chooser|static)
+    [[ $1 == static ]] && EZ_MENU_ANIMATE_STARS=0
     selected=$(ez_menu_choose 0 "$(ez_menu_banner)" One Two Three)
     printf 'SELECTED=%s STATUS=%s\n' "$selected" "$?"
     ;;

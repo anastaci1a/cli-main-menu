@@ -11,6 +11,12 @@ function ez_menu_choose() (
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
   local number_width label_width option_block_width option_left option_right
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
+  local ez_stars_animated=0 input_timeout=1 actual_title_width
+  local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
+  local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
+  local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
+  local -a stars_cells stars_fade stars_hue stars_sat stars_value
+  local -A stars_char stars_palette stars_birth stars_seen stars_rgb_cache
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
@@ -81,10 +87,19 @@ function ez_menu_choose() (
   printf '\033[?1049h\033[?1004h\033[?25l\033[2J\033[H' >&2
   mapfile -t banner_rows <<< "$banner"
   (( ${#banner_rows[@]} > 3 )) && main_banner=1
+  if (( main_banner )) && [[ ${EZ_MENU_ANIMATE_STARS:-1} == 1 ]]; then
+    ez_stars_animated=1 input_timeout=0.05
+    ez_stars_init
+  fi
   mapfile -t title_rows < <(ez_menu_title_rows)
   title_width=${#title_rows[0]}
   (( selected >= count )) && selected=0
   while :; do
+    frame=''
+    if (( ez_stars_animated )); then
+      ez_stars_now
+      stars_frame_started=$stars_now
+    fi
     if (( redraw || SECONDS != last_tick )); then
       # Read the real terminal size: phone keyboards/app switching can change it.
       term_size=$(stty size <&2 2>/dev/null) || term_size=''
@@ -121,20 +136,30 @@ function ez_menu_choose() (
         visible=$count
         (( visible > available_rows )) && visible=$available_rows
         read -r number_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
-        new_star_key="$COLUMNS:$visible:$option_left:$option_right"
+        new_star_key="$COLUMNS:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
-          # Keep three clear cells beside the entire option block, including >.
-          left_gutter=3 right_gutter=3
-          (( left_gutter > option_left )) && left_gutter=$option_left
-          (( right_gutter > option_right )) && right_gutter=$option_right
-          menu_star_left=() menu_star_right=()
-          for ((star_row = 0; star_row < visible; star_row++)); do
-            # Descend from 65% of the title's brightness to 5% at the bottom.
-            brightness=15
-            (( visible > 1 )) && brightness=$((65 - 60 * star_row / (visible - 1)))
-            menu_star_left[star_row]=$(ez_menu_side_stars "$((option_left - left_gutter))" "$brightness"; printf '%*s' "$left_gutter" '')
-            menu_star_right[star_row]=$(printf '%*s' "$right_gutter" ''; ez_menu_side_stars "$((option_right - right_gutter))" "$brightness")
-          done
+          if (( ez_stars_animated )); then
+            actual_title_width=$title_width
+            if (( compact )); then
+              row=$(ez_menu_title_text)
+              actual_title_width=${#row}
+              (( actual_title_width > COLUMNS )) && actual_title_width=$COLUMNS
+            fi
+            ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin"
+          else
+            # Keep three clear cells beside the entire option block, including >.
+            left_gutter=3 right_gutter=3
+            (( left_gutter > option_left )) && left_gutter=$option_left
+            (( right_gutter > option_right )) && right_gutter=$option_right
+            menu_star_left=() menu_star_right=()
+            for ((star_row = 0; star_row < visible; star_row++)); do
+              # Descend from 65% of the title's brightness to 5% at the bottom.
+              brightness=15
+              (( visible > 1 )) && brightness=$((65 - 60 * star_row / (visible - 1)))
+              menu_star_left[star_row]=$(ez_menu_side_stars "$((option_left - left_gutter))" "$brightness"; printf '%*s' "$left_gutter" '')
+              menu_star_right[star_row]=$(printf '%*s' "$right_gutter" ''; ez_menu_side_stars "$((option_right - right_gutter))" "$brightness")
+            done
+          fi
           star_cache_key=$new_star_key
         fi
         layout_dirty=0
@@ -155,11 +180,28 @@ function ez_menu_choose() (
         ez_menu_draw "$selected" "$first" "$visible" "$@"
         printf '\r\033[J'
       )
-      printf '\033[H%s' "$frame" >&2
+      # The foreground redraw erased the overlay; restore it from current state.
+      stars_seen=()
       last_tick=$SECONDS
       redraw=0
     fi
-    if IFS= read -rsn1 -t 1 key; then
+    if (( ez_stars_animated )); then
+      ez_stars_now
+      ez_stars_tick "$((stars_now - stars_origin))"
+      if [[ -n $frame ]]; then
+        # Write foreground and restored stars together, avoiding a blank flash.
+        printf '\033[H%s%s' "$frame" "$stars_output" >&2
+      elif [[ -n $stars_output ]]; then
+        printf '%s' "$stars_output" >&2
+      fi
+      ez_stars_now
+      stars_delay=$((50 - (stars_now - stars_frame_started)))
+      (( stars_delay < 1 )) && stars_delay=1
+      printf -v input_timeout '0.%03d' "$stars_delay"
+    elif [[ -n $frame ]]; then
+      printf '\033[H%s' "$frame" >&2
+    fi
+    if IFS= read -rsn1 -t "$input_timeout" key; then
       :
     else
       read_status=$?

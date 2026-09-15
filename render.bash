@@ -3,20 +3,15 @@
 
 function ez_menu_banner() {
   local compact=${1:-0} star_margin=${2:-2}
-  local -a title_rows=(
-    '#####  ###  ##### ##### #     #     ##### ##### #####'
-    '#     #   #   #   #     #     #       #     #   #    '
-    '##### #####   #   ####  #     #       #     #   #### '
-    '    # #   #   #   #     #     #       #     #   #    '
-    '##### #   #   #   ##### ##### ##### #####   #   #####'
-  )
+  local -a title_rows
+  mapfile -t title_rows < <(ez_menu_title_rows)
   local title_width=${#title_rows[0]} star_padding banner_width=${COLUMNS:-80}
   local star_chars='*.+                     ' star_row star_col star_index star_color
   local -a star_colors=("$C_STAR_BLUE" "$C_STAR_LAVENDER" "$C_STAR_PINK")
 
   # The star field fills the screen; center the lettering within that width.
   if (( compact || banner_width < title_width + 4 )); then
-    title_rows=('SATELLITE')
+    title_rows=("$(ez_menu_title_text)")
     title_rows[0]=${title_rows[0]:0:banner_width}
     title_width=${#title_rows[0]}
   fi

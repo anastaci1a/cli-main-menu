@@ -11,6 +11,9 @@
 - Source modules in the current shell. Do not make loading open a UI, launch
   Codex, change directory, or alter shell options. Reloading must work repeatedly.
 - Keep `startup`, `ez_select`, and existing `ez_menu_*` functions available.
+- Keep personal settings in ignored `config.bash`; never stage it. Load tracked
+  `config.example.bash` first, with `MAIN MENU` as the portable title default.
+- Derive title dimensions from `font.bash`; do not assume a particular title.
 
 ## Behavior to preserve
 

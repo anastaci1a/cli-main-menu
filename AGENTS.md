@@ -54,6 +54,8 @@
   not in a command substitution; only the selector owns an isolated subshell.
 - Keep directory validation and exact tmux session name `codex`. Preserve the
   user's explicit Codex launch flag and `cxr` resume behavior.
+- Return to the main menu when the Codex tmux client detaches, keeping the
+  Codex option selected and refreshing whether its session still exists.
 
 ## Verification
 

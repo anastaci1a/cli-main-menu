@@ -14,7 +14,11 @@ tmux() {
   case $1 in
     has-session) [[ ${TEST_SESSION:-absent} == present ]] ;;
     attach) printf 'ATTACHED_CODEX\n' ;;
-    new-session) printf 'CREATED:'; printf '<%s>' "$@"; printf '\n' ;;
+    new-session)
+      printf 'CREATED:'; printf '<%s>' "$@"; printf '\n'
+      # The attached client returns on detach; the session continues to exist.
+      TEST_SESSION=present
+      ;;
   esac
 }
 case $1 in

@@ -180,6 +180,8 @@ goes to stderr; stdout returns the selected zero-based index.
 - Codex resumes tmux session `codex` through `cxr`, or validates a starting
   directory and creates `codex` running
   `codex --dangerously-bypass-approvals-and-sandbox`.
+- Detach from a Codex session opened through the menu with Ctrl-B, then D, to
+  return to SATELLITE with Resume Codex selected. The session keeps running.
 - Jobs is disabled when this shell has no stopped jobs. When available, it lists
   running and stopped shell jobs and offers foreground/termination actions.
 - Interactive options use ○, changing to ● in place when selected. The marker

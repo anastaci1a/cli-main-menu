@@ -14,6 +14,7 @@ function ez_select() {
       'New Terminal|ez_menu_terminal|close'
       "$(ez_menu_codex_label)|ez_menu_codex|close"
       'Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)'
+      'Exit|exit|close'
     )
     menu_labels=() menu_actions=() menu_behaviors=() menu_availability=() menu_choice_args=()
     disabled_indices=''

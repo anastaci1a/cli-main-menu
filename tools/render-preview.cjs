@@ -104,11 +104,11 @@ function paint(cells) {
 for (let index = 0; index < streams.length; index++) {
   const cells = decode(streams[index]);
   paint(cells);
-  if (index === 12) fs.writeFileSync(path.join(outputDir, 'menu-preview.png'), canvas.toBuffer('image/png'));
+  if (index === 48) fs.writeFileSync(path.join(outputDir, 'menu-preview.png'), canvas.toBuffer('image/png'));
   const rgba = ctx.getImageData(0, 0, width, height).data;
   const palette = quantize(rgba, 128);
   const indexed = applyPalette(rgba, palette);
-  encoder.writeFrame(indexed, width, height, { palette, delay: 200, repeat: 0 });
+  encoder.writeFrame(indexed, width, height, { palette, delay: 50, repeat: 0 });
 }
 encoder.finish();
 fs.writeFileSync(path.join(outputDir, 'menu-demo.gif'), Buffer.from(encoder.bytes()));

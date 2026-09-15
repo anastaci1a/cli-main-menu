@@ -10,19 +10,24 @@ function ez_menu_choose() (
   local status_line='' status_output='' status_seen='' status_token elapsed
   local first=0 visible available_rows frame row frame_banner
   local term_size term_lines term_columns hint_count main_banner=0
+  local terminal_state
   local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
-  local number_width label_width option_block_width option_left option_right
+  local marker_width label_width option_block_width option_left option_right
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
   local ez_stars_animated=0 input_timeout=1 actual_title_width
   local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
+  local stars_travel stars_rise stars_tail
   local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
   local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
-  local stars_spawn_weight
-  local -a stars_cells stars_fade stars_hue stars_sat stars_value
+  local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
+  local stars_density_max
+  local stars_horizon_delay stars_horizon_next
+  local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
+  local -A stars_text_flash stars_occluded
   local -A stars_hue_offset stars_cell_render stars_text_palette
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
@@ -86,11 +91,16 @@ function ez_menu_choose() (
     return 130
   fi
 
-  # Leave the menu screen before launching an action (including tmux/fg).
-  trap 'printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
+  # read -s only suppresses echo during the read itself. Keep it off while
+  # rendering too, so queued arrow bytes never appear as literal ^[[A text.
+  terminal_state=$(stty -g <&0 2>/dev/null) || return 130
+  # Restore the exact input modes before launching an action (including tmux/fg).
+  trap 'stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
-  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH CONT
+  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH
+  trap 'stty -echo -echonl <&0 2>/dev/null; redraw=1; layout_dirty=1; full_redraw=1' CONT
+  stty -echo -echonl <&0 || return 130
   printf '\033[?1049h\033[?1004h\033[?25l\033[2J\033[H' >&2
   mapfile -t banner_rows <<< "$banner"
   (( ${#banner_rows[@]} > 3 )) && main_banner=1
@@ -145,7 +155,7 @@ function ez_menu_choose() (
         (( available_rows < 1 )) && available_rows=1
         visible=$count
         (( visible > available_rows )) && visible=$available_rows
-        read -r number_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
+        read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
         new_star_key="$COLUMNS:$LINES:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
           if (( ez_stars_animated )); then
@@ -157,15 +167,14 @@ function ez_menu_choose() (
             fi
             ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin" "$count"
           else
-            # Keep three clear cells beside the entire option block, including >.
+            # Keep clear gutter cells beside the option block and its selector.
             left_gutter=3 right_gutter=3
             (( left_gutter > option_left )) && left_gutter=$option_left
             (( right_gutter > option_right )) && right_gutter=$option_right
             menu_star_left=() menu_star_right=()
             for ((star_row = 0; star_row < visible; star_row++)); do
-              # Descend from 65% of the title's brightness to 5% at the bottom.
-              brightness=15
-              (( visible > 1 )) && brightness=$((65 - 60 * star_row / (visible - 1)))
+              # Keep the darkest fade endpoint one row beyond the visible field.
+              brightness=$((65 - 60 * star_row / visible))
               menu_star_left[star_row]=$(ez_menu_side_stars "$((option_left - left_gutter))" "$brightness"; printf '%*s' "$left_gutter" '')
               menu_star_right[star_row]=$(printf '%*s' "$right_gutter" ''; ez_menu_side_stars "$((option_right - right_gutter))" "$brightness")
             done
@@ -180,7 +189,7 @@ function ez_menu_choose() (
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected"
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$number_width"
+          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
           text_cache_key=$new_text_key
         fi
         status_line=$(ez_menu_status_text)

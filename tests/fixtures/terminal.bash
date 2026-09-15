@@ -14,17 +14,32 @@ tmux() {
   case $1 in
     has-session) [[ ${TEST_SESSION:-absent} == present ]] ;;
     attach) printf 'ATTACHED_CODEX\n' ;;
-    new-session) printf 'CREATED:'; printf '<%s>' "$@"; printf '\n' ;;
+    new-session)
+      printf 'CREATED:'; printf '<%s>' "$@"; printf '\n'
+      # The attached client returns on detach; the session continues to exist.
+      TEST_SESSION=present
+      ;;
   esac
 }
 case $1 in
   menu)
     ez_select
     ;;
-  chooser|static)
+  chooser|static|input_echo)
     [[ $1 == static ]] && EZ_MENU_ANIMATE_STARS=0
+    if [[ $1 == input_echo ]]; then
+      # Give the PTY driver a deterministic interval outside Bash's read -s.
+      ez_menu_status_text() {
+        printf 'INPUT_WINDOW\n' >&2
+        sleep 0.25
+        printf 'Input echo test'
+      }
+    fi
+    saved_modes=$(stty -g)
     selected=$(ez_menu_choose 0 "$(ez_menu_banner)" One Two Three)
     printf 'SELECTED=%s STATUS=%s\n' "$selected" "$?"
+    [[ $(stty -g) == "$saved_modes" ]] || { printf 'TTY_MODE_MISMATCH\n'; exit 1; }
+    printf 'TTY_RESTORED\n'
     ;;
   many)
     LINES=12

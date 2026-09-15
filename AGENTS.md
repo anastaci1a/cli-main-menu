@@ -18,12 +18,13 @@
 ## Behavior to preserve
 
 - Define entries in `menu.bash`; do not hard-code option counts elsewhere.
-- Keep number columns and labels aligned as counts cross 9 and 99. Center the
-  whole left-aligned block, reserving space for the selection arrow.
+- Use one marker column: ○ for unselected options, ● for the selected option.
+  Center the whole left-aligned block independently of option count. Keep numbers
+  in the non-TTY fallback, where users need them to choose an option by typing.
 - Keep full-width status/stars, centered title/hints, responsive hint grouping,
   disabled styling, and all-or-nothing disabled explanations.
 - Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
-  geometry on resize; preserve the text mask and downward fade even at peak white.
+  geometry on resize; preserve foreground glyphs and downward fade even at peak white.
 - Twinkles permanently replace their base stars and fade out more slowly than
   they brighten. Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
@@ -31,24 +32,41 @@
 - Keep star hue offsets stable and bounded around one center, concentrated with
   a Gaussian-like distribution rather than independently cycling palette hues.
 - Extend the star field past hints when rows permit, and stretch the option-row
-  brightness falloff to the field's last row. Mask title, option, page, and hint
-  text; the footer may fade into full-width darkness.
+  brightness falloff to the field's last row. Stars extend through option/hint
+  spaces; foreground glyphs occlude them. Preserve stars beneath text across
+  scrolling, and never spawn a twinkle on a glyph. The footer fades into darkness.
 - Weight individual twinkle opportunities smoothly through the sweep. A sweep
   reduces their frequency but must never switch births off abruptly. Existing
   twinkles continue their fade and share the crossing white/hue treatment.
-- Sweep title/number/hint accents using the shared spatial phase and complementary
+- Sweep title/marker/hint accents using the shared spatial phase and complementary
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
-- Status backgrounds interpolate to the settled hint color during each sweep.
+- Ease the diagonal's movement in and out while preserving individual flash
+  durations. Precompute arrival times instead of solving easing for every cell/frame.
+- Keep broad slow edge bands and the existing peak travel speed when adjusting
+  default easing. Horizon density rises from the original top density while the
+  downward brightness fade and foreground glyphs remain intact. Keep uniform
+  twinkle opportunities and give them priority over extra horizon births, so
+  denser lower rows never consume the top's baseline opportunities.
+- Sample the downward fade with an exclusive bottom endpoint: the last visible
+  row uses the color step before the darkest endpoint, never that endpoint itself.
+- Status backgrounds ease to the settled hint color during each sweep.
+- Bold stars and title cells briefly at their own near-white sweep peaks, then
+  restore normal weight. Keep selected-option bolding and disabled styling intact.
+  Include transient weight in cached cells so redraws match animation frames.
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
+- Keep input echo disabled throughout the selector, including redraws between
+  reads. Restore the caller's exact terminal settings before returning or exiting.
 - Disabled options must be skipped in both directions and refused by the numeric
   fallback. A fully disabled list must terminate without looping forever.
 - Job availability means stopped jobs in the calling shell. Run actions there,
   not in a command substitution; only the selector owns an isolated subshell.
 - Keep directory validation and exact tmux session name `codex`. Preserve the
   user's explicit Codex launch flag and `cxr` resume behavior.
+- Return to the main menu when the Codex tmux client detaches, keeping the
+  Codex option selected and refreshing whether its session still exists.
 
 ## Verification
 

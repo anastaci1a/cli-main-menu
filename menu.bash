@@ -12,7 +12,7 @@ function ez_select() {
     # Use command substitution for labels that depend on current state.
     menu_items=(
       'New Terminal|ez_menu_terminal|close'
-      "$(ez_menu_codex_label)|ez_menu_codex|close"
+      "$(ez_menu_codex_label)|ez_menu_codex|stay"
       'Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)'
       'Exit|exit|close'
     )

@@ -85,37 +85,55 @@ dimensions, so changing its length does not require editing the renderer.
 
 Animations run in the selector at a target of 20 frames per second, updating
 only changed star and accent cells between foreground redraws. No background worker or
-extra runtime dependency is needed. The title, option block, arrow, hints, and
-status bar remain protected from stars; viewport changes rebuild the field.
+extra runtime dependency is needed. The title, option block, markers, hints, and
+status bar remain readable over stars; viewport changes rebuild the field.
 
-Twinkles start one at a time, with random opportunities spaced 1–500 ms apart.
+Twinkles start one at a time, with random opportunities spaced 1–200 ms apart
+at the default 2.5× rate. The rate setting scales opportunity frequency
+multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
 then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
 permanently. A smooth, sine-shaped probability ranges from 100% between sweeps
-to 20% at the shimmer midpoint. Births become rarer during the sweep, while
-existing twinkles keep fading through it.
+to 20% at its trough. The entire curve leads the shimmer midpoint by 500 ms,
+so births lessen sooner and recover earlier. Births remain rarer during the
+sweep, while existing twinkles keep fading through it.
 
-Every four seconds, a one-second diagonal band travels from the top left to the
-bottom right. Stars quickly approach white, then slowly regain saturation with
+Every four seconds, a diagonal band travels from the top left to the bottom right
+in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diagonal
+40% of the travel time, making the ease visible beyond the tiny corners. The middle
+keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
+for 240 ms. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
+Stars and title characters briefly turn bold around their own near-white sweep
+peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
-the terminal has room. The row fade stretches from 65% at the first option to
-5% at the field's last row. Text areas have clear gutters; stars remain sparse
-along both sides of the hints and options without covering their words.
+the terminal has room. The row fade starts at 65% at the first option and approaches
+5% one row beyond the field. That darkest endpoint is excluded, leaving the last
+visible row at the preceding color step. Star density eases upward quadratically from the
+original 1-in-8 chance at the top to 6-in-8 at the bottom, creating a dense, dim
+horizon. Twinkle frequency follows that same density gradient: the original
+uniform opportunities remain, with extra opportunities weighted by each row's
+density above baseline. Uniform births take priority, so the horizon cannot
+crowd out the top when reaching the one-birth-per-frame limit. Both streams use
+the same 2.5× rate setting and smooth sweep envelope.
+
+Stars extend behind the option block and control hints, including their spaces.
+Foreground letters and circle markers always win over stars. The background
+retains its state under text, so scrolling reveals existing stars rather than
+rerandomizing them. The title keeps its surrounding clear space.
 
 Stars share one central hue, with stable offsets in a 60° total range (±30°).
 The offsets approximate a Gaussian distribution with a 10° standard deviation,
 so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
-The title and option numbers
-(including the selection arrow) join the same sweep with a shared hue 180°
+The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-70° per sweep. Title/selection bolding and disabled-number strike/dimming remain
-intact; option labels keep their normal styling. Control hints share the title
+70° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
+intact during the title's bold flash. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
-During each sweep the full-width status background linearly interpolates from
+During each sweep the full-width status background eases from
 the previous settled hint color to the next, then holds that color.
 
 Clock ticks update the status bar alone; navigation repaints the option area.
@@ -128,15 +146,19 @@ Override these settings in ignored `config.bash`, then source `.bashrc`:
 ```bash
 EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
-EZ_MENU_SWEEP_DURATION_MS=1000
+EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
+EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–1000)
+EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
+EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
-EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/number hue
+EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
 ```
 
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the
-interval leaves at least 1800 ms between sweeps. Non-TTY/numeric
+interval leaves at least 1800 ms between sweeps. Durations below 600 ms also
+shorten individual flashes to leave room for movement. Non-TTY/numeric
 menus stay static. Animation state survives navigation, focus, and Ctrl-L within
 the selector; opening a new selector starts a fresh field.
 
@@ -175,9 +197,14 @@ goes to stderr; stdout returns the selected zero-based index.
 - Codex resumes tmux session `codex` through `cxr`, or validates a starting
   directory and creates `codex` running
   `codex --dangerously-bypass-approvals-and-sandbox`.
+- Detach from a Codex session opened through the menu with Ctrl-B, then D, to
+  return to SATELLITE with Resume Codex selected. The session keeps running.
 - Jobs is disabled when this shell has no stopped jobs. When available, it lists
   running and stopped shell jobs and offers foreground/termination actions.
-- Disabled Jobs has a dark purple struck number and a dark gray struck label;
+- Interactive options use ○, changing to ● in place when selected. The marker
+  column stays the same width for any number of options. The non-TTY fallback
+  retains numbers for typed selection.
+- Disabled Jobs has a dark purple struck marker and a dark gray struck label;
   its `(no stopped jobs)` explanation is not struck through.
 - The menu uses an alternate screen and repairs on focus/resize and periodically.
   It restores terminal modes before launching an action or returning to the shell.

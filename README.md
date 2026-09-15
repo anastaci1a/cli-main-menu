@@ -100,6 +100,7 @@ goes to stderr; stdout returns the selected zero-based index.
 ## Current behavior
 
 - Up/Down moves the selection, Enter selects, Escape leaves, and Ctrl-L redraws.
+- Exit is the last option and runs `exit` in the current shell.
 - The status bar fills the screen. Hints use 4, 2+2, or 1+1+1+1 layouts.
 - Option rows form a centered, left-aligned block with a fixed arrow slot.
 - Stars stay fixed during clock ticks and navigation. Side stars keep a clear

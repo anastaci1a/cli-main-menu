@@ -3,6 +3,11 @@
 Bash startup menu with a live status bar, an animated fading star field, Codex
 session controls, and shell job controls.
 
+![SATELLITE menu animation](media/menu-demo.gif)
+
+The preview is rendered from the actual Bash menu functions with a simulated
+clock and jobs. The still [preview image](media/menu-preview.png) is available too.
+
 ## Load and run
 
 Keep this folder at `scripts/cli/` beside `.bashrc`:
@@ -83,16 +88,22 @@ only changed star and accent cells between foreground redraws. No background wor
 extra runtime dependency is needed. The title, option block, arrow, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
-Twinkles start one at a time, with random delays of 1–500 ms when a sweep is clear.
+Twinkles start one at a time, with random opportunities spaced 1–500 ms apart.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
 then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
-permanently. Births pause early enough for all twinkles to finish before a sweep.
+permanently. A smooth, sine-shaped probability ranges from 100% between sweeps
+to 20% at the shimmer midpoint. Births become rarer during the sweep, while
+existing twinkles keep fading through it.
 
 Every four seconds, a one-second diagonal band travels from the top left to the
 bottom right. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
+The star field now reaches the control hints and up to two rows below them when
+the terminal has room. The row fade stretches from 65% at the first option to
+5% at the field's last row. Text areas have clear gutters; stars remain sparse
+along both sides of the hints and options without covering their words.
 
 Stars share one central hue, with stable offsets in a 60° total range (±30°).
 The offsets approximate a Gaussian distribution with a 10° standard deviation,
@@ -125,7 +136,7 @@ EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/number hue
 ```
 
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the
-interval leaves at least 1800 ms between sweeps for twinkles. Non-TTY/numeric
+interval leaves at least 1800 ms between sweeps. Non-TTY/numeric
 menus stay static. Animation state survives navigation, focus, and Ctrl-L within
 the selector; opening a new selector starts a fresh field.
 
@@ -187,6 +198,17 @@ The terminal checks require Perl `IO::Pty` and
 exercise navigation, resize/focus, Codex arguments, and temporary test jobs.
 They stub tmux and do not launch Codex or operate on your existing shell jobs.
 Set `EZ_CLI_BASHRC` to test a different `.bashrc` with the terminal suite.
+
+To regenerate the README preview on a system with Node.js and DejaVu Mono fonts:
+
+```bash
+npm install --prefix tools
+bash tools/preview-frames.bash > /tmp/satellite-frames.ansi
+node tools/render-preview.cjs /tmp/satellite-frames.ansi media
+```
+
+These rendering dependencies are only for the README preview; the menu needs
+none of them at runtime.
 
 ## Git
 

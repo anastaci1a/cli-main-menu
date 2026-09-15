@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "description": "Optional dependencies for rendering the README preview",
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.9",
+    "gifenc": "1.0.3"
+  }
+}

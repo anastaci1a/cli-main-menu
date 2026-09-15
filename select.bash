@@ -7,11 +7,11 @@ function ez_menu_choose() (
   local read_status last_tick=-1 redraw=1 layout_dirty=1
   local first=0 visible available_rows frame row frame_banner
   local term_size term_lines term_columns hint_count main_banner=0
-  local compact star_margin title_height cached_columns=0 cached_compact=-1 cached_margin=-1
+  local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
   local number_width label_width option_block_width option_left option_right
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
-  local -a banner_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
+  local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
@@ -81,6 +81,8 @@ function ez_menu_choose() (
   printf '\033[?1049h\033[?1004h\033[?25l\033[2J\033[H' >&2
   mapfile -t banner_rows <<< "$banner"
   (( ${#banner_rows[@]} > 3 )) && main_banner=1
+  mapfile -t title_rows < <(ez_menu_title_rows)
+  title_width=${#title_rows[0]}
   (( selected >= count )) && selected=0
   while :; do
     if (( redraw || SECONDS != last_tick )); then
@@ -96,8 +98,8 @@ function ez_menu_choose() (
         mapfile -t hint_rows < <(ez_menu_hint_lines)
         hint_count=${#hint_rows[@]}
         if (( main_banner )); then
-          compact=0 title_height=5 star_margin=2
-          if (( COLUMNS < 57 || LINES < title_height + 4 + count + hint_count + 5 )); then
+          compact=0 title_height=${#title_rows[@]} star_margin=2
+          if (( COLUMNS < title_width + 4 || LINES < title_height + 4 + count + hint_count + 5 )); then
             compact=1 title_height=1
           fi
           while (( star_margin > 0 && LINES < title_height + 2 * star_margin + count + hint_count + 5 )); do

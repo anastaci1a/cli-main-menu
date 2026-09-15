@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 shopt -s expand_aliases
 source -- "$EZ_CLI_BASHRC"
+# Keep visual expectations independent of personal configuration.
+EZ_MENU_TITLE=SATELLITE
 COLUMNS=80
 LINES=24
 clear() { :; }

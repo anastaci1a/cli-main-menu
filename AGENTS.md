@@ -41,6 +41,9 @@
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
 - Ease the diagonal's movement in and out while preserving individual flash
   durations. Precompute arrival times instead of solving easing for every cell/frame.
+- Keep broad slow edge bands and the existing peak travel speed when adjusting
+  default easing. Horizon density rises from the original top density while the
+  downward brightness fade and protected text gutters remain intact.
 - Status backgrounds ease to the settled hint color during each sweep.
 - Bold stars and title cells briefly at their own near-white sweep peaks, then
   restore normal weight. Keep selected-option bolding and disabled styling intact.

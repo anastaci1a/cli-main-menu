@@ -88,8 +88,8 @@ only changed star and accent cells between foreground redraws. No background wor
 extra runtime dependency is needed. The title, option block, markers, hints, and
 status bar remain protected from stars; viewport changes rebuild the field.
 
-Twinkles start one at a time, with random opportunities spaced 1–250 ms apart
-at the default 2× rate. The rate setting scales opportunity frequency
+Twinkles start one at a time, with random opportunities spaced 1–200 ms apart
+at the default 2.5× rate. The rate setting scales opportunity frequency
 multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
@@ -99,17 +99,21 @@ to 20% at its trough. The entire curve leads the shimmer midpoint by 500 ms,
 so births lessen sooner and recover earlier. Births remain rarer during the
 sweep, while existing twinkles keep fading through it.
 
-Every four seconds, a one-second diagonal band travels from the top left to the
-bottom right with pronounced cubic ease-in/out: slow at each end and faster through the
-middle. Stars quickly approach white, then slowly regain saturation with
+Every four seconds, a diagonal band travels from the top left to the bottom right
+in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diagonal
+40% of the travel time, making the ease visible beyond the tiny corners. The middle
+keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
+for 240 ms. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
 Stars and title characters briefly turn bold around their own near-white sweep
 peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
 the terminal has room. The row fade stretches from 65% at the first option to
-5% at the field's last row. Text areas have clear gutters; stars remain sparse
-along both sides of the hints and options without covering their words.
+5% at the field's last row. Star density eases upward quadratically from the
+original 1-in-8 chance at the top to 6-in-8 at the bottom, creating a dense, dim
+horizon. New twinkles favor the same lower rows. Text areas keep clear gutters,
+including around the hints and options.
 
 Stars share one central hue, with stable offsets in a 60° total range (±30°).
 The offsets approximate a Gaussian distribution with a 10° standard deviation,
@@ -134,8 +138,9 @@ Override these settings in ignored `config.bash`, then source `.bashrc`:
 EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
-EZ_MENU_TWINKLE_RATE_PERCENT=200 # 100 = original rate; 200 = 2x (range 1–1000)
-EZ_MENU_SWEEP_DURATION_MS=1000
+EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–1000)
+EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
+EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
@@ -143,7 +148,8 @@ EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
 ```
 
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the
-interval leaves at least 1800 ms between sweeps. Non-TTY/numeric
+interval leaves at least 1800 ms between sweeps. Durations below 600 ms also
+shorten individual flashes to leave room for movement. Non-TTY/numeric
 menus stay static. Animation state survives navigation, focus, and Ctrl-L within
 the selector; opening a new selector starts a fresh field.
 

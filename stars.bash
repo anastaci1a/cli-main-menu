@@ -19,16 +19,21 @@ function ez_stars_init() {
   local color code red green blue high low delta hue palette=0 hue_total=0
   local -a levels=(0 95 135 175 215 255)
   stars_period=${EZ_MENU_SWEEP_INTERVAL_MS:-4000}
-  stars_duration=${EZ_MENU_SWEEP_DURATION_MS:-1000}
+  stars_duration=${EZ_MENU_SWEEP_DURATION_MS:-1467}
   stars_step=${EZ_MENU_SWEEP_HUE_STEP:-70}
   stars_sat_max=${EZ_MENU_STAR_SATURATION_MAX:-800}
   stars_accent_offset=${EZ_MENU_SWEEP_ACCENT_OFFSET:-180}
   stars_hue_spread=${EZ_MENU_STAR_HUE_SPREAD:-60}
   stars_twinkle_advance=${EZ_MENU_TWINKLE_ADVANCE_MS:-500}
-  stars_twinkle_rate=${EZ_MENU_TWINKLE_RATE_PERCENT:-200}
+  stars_twinkle_rate=${EZ_MENU_TWINKLE_RATE_PERCENT:-250}
+  stars_density_max=${EZ_MENU_HORIZON_DENSITY_PERCENT:-600}
+  [[ $stars_density_max =~ ^[1-9][0-9]{0,3}$ ]] || stars_density_max=600
+  (( stars_density_max < 100 )) && stars_density_max=100
+  (( stars_density_max > 800 )) && stars_density_max=800
+  stars_density_max=$((stars_density_max * 10))
   [[ $stars_twinkle_advance =~ ^[0-9]{1,5}$ ]] || stars_twinkle_advance=500
   stars_twinkle_advance=$((10#$stars_twinkle_advance))
-  [[ $stars_twinkle_rate =~ ^[1-9][0-9]{0,3}$ ]] || stars_twinkle_rate=200
+  [[ $stars_twinkle_rate =~ ^[1-9][0-9]{0,3}$ ]] || stars_twinkle_rate=250
   (( stars_twinkle_rate > 1000 )) && stars_twinkle_rate=1000
   # Scale opportunity frequency, preserving the envelope's peak/trough ratio.
   stars_twinkle_delay=$((50000 / stars_twinkle_rate))
@@ -36,7 +41,7 @@ function ez_stars_init() {
   stars_hue_spread=$((10#$stars_hue_spread))
   (( stars_hue_spread > 360 )) && stars_hue_spread=360
   [[ $stars_period =~ ^[1-9][0-9]{0,5}$ ]] || stars_period=4000
-  [[ $stars_duration =~ ^[1-9][0-9]{0,4}$ ]] || stars_duration=1000
+  [[ $stars_duration =~ ^[1-9][0-9]{0,4}$ ]] || stars_duration=1467
   [[ $stars_step =~ ^[0-9]{1,3}$ ]] || stars_step=70
   stars_step=$((10#$stars_step))
   [[ $stars_sat_max =~ ^[0-9]{1,4}$ ]] || stars_sat_max=800
@@ -46,14 +51,19 @@ function ez_stars_init() {
   stars_accent_offset=$((10#$stars_accent_offset))
   (( stars_duration < 300 )) && stars_duration=300
   (( stars_period < stars_duration + 1800 )) && stars_period=$((stars_duration + 1800))
-  # Invert cubic ease-in/out once: each diagonal position gets its arrival time for
-  # eased movement, while individual flashes retain their real-time durations.
-  local progress distance=0 travel=$((stars_duration * 7 / 10))
+  # Keep the 60 ms rise / 240 ms fade when extending movement. Only compress
+  # flashes for unusually short custom sweeps so travel still has time to run.
+  local flash=300
+  (( stars_duration < 600 )) && flash=$((stars_duration / 2))
+  stars_travel=$((stars_duration - flash))
+  stars_rise=$((flash / 5)) stars_tail=$((flash - stars_rise))
+  # Invert the movement once; no curve solving in the per-cell frame loop.
+  local progress distance=0
   stars_sweep_arrival=()
   for ((progress = 0; progress <= 1000; progress++)); do
     ez_stars_sweep_ease "$progress"
     while (( distance <= stars_eased )); do
-      stars_sweep_arrival[distance]=$((travel * progress / 1000))
+      stars_sweep_arrival[distance]=$((stars_travel * progress / 1000))
       distance=$((distance + 1))
     done
   done
@@ -109,7 +119,7 @@ function ez_stars_init() {
 function ez_stars_layout() {
   local banner_count=$1 title_height=$2 title_width=$3 margin=$4
   local total_count=${5:-$visible} hint_width=0 hint hint_left hint_right page_width=0 page_left page_right
-  local option_start=$((banner_count + 3)) row col cell mask_left mask_right brightness
+  local option_start=$((banner_count + 3)) row col cell mask_left mask_right brightness depth
   local option_end=$((option_start + visible - 1)) hint_start=$((option_start + visible + 1)) hint_end
   local title_left=$(( (COLUMNS - title_width) / 2 )) chars='*.+ '
   for hint in "${hint_rows[@]}"; do (( ${#hint} > hint_width )) && hint_width=${#hint}; done
@@ -123,12 +133,16 @@ function ez_stars_layout() {
   fi
   page_left=$(( (COLUMNS - page_width) / 2 - 3 )) page_right=$(( (COLUMNS + page_width + 1) / 2 + 3 ))
   stars_cells=() stars_char=() stars_palette=() stars_saturation=() stars_hue_offset=()
-  stars_birth=() stars_seen=() stars_fade=() stars_cell_render=() stars_text_seen=()
+  stars_birth=() stars_seen=() stars_fade=() stars_density=() stars_cell_render=() stars_text_seen=()
   # Leave the final terminal row free so repainting cannot scroll the screen.
   stars_top=3 stars_bottom=$((hint_end + 2))
   (( stars_bottom >= LINES )) && stars_bottom=$((LINES - 1))
   stars_sweep_bottom=$stars_bottom
   for ((row = stars_top; row <= stars_bottom; row++)); do
+    depth=0
+    (( stars_bottom > stars_top )) && depth=$(((row - stars_top) * 1000 / (stars_bottom - stars_top)))
+    # Preserve the top's 1-in-8 baseline; quadratic density builds a dim horizon.
+    stars_density[row]=$((1000 + (stars_density_max - 1000) * depth * depth / 1000000))
     mask_left=$COLUMNS mask_right=$COLUMNS brightness=100
     if (( row >= 3 + margin && row < 3 + margin + title_height )); then
       mask_left=$((title_left - 2)) mask_right=$((title_left + title_width + 2))
@@ -157,7 +171,7 @@ function ez_stars_layout() {
       (( col >= mask_left && col < mask_right )) && continue
       cell=$(( (row - 1) * COLUMNS + col ))
       stars_cells+=("$cell")
-      if (( RANDOM % 8 == 0 )); then
+      if (( (RANDOM * 32768 + RANDOM) % 8000 < stars_density[row] )); then
         stars_char[$cell]=${chars:RANDOM%3:1}
         stars_palette[$cell]=$((RANDOM % 3))
         ez_stars_pick_saturation "$cell"
@@ -258,17 +272,28 @@ function ez_stars_ease() {
   stars_eased=$((amount * amount * (3000 - 2 * amount) / 1000000))
 }
 
-# Stronger movement curve for the sweep, separate from individual light fades.
+# Broad slow shoulders: the first/last quarter of diagonal distance each takes
+# 40% of travel time. Unlike simply raising an easing exponent, this slows broad
+# edge bands, not just tiny corners. Velocity is continuous at both joins.
+# Peak slope is 5 (previous cubic: 3); 1167 ms travel preserves the old 700 ms
+# travel's peak speed to rounding precision. Light fades remain independent.
 function ez_stars_sweep_ease() {
-  local amount=$1
+  local amount=$1 reverse=0 position
   (( amount < 0 )) && amount=0
   (( amount > 1000 )) && amount=1000
-  if (( amount <= 500 )); then
-    stars_eased=$((4 * amount * amount * amount / 1000000))
-  else
-    amount=$((1000 - amount))
-    stars_eased=$(((1000000000 - 4 * amount * amount * amount) / 1000000))
+  if (( amount > 500 )); then
+    amount=$((1000 - amount)) reverse=1
   fi
+  if (( amount <= 400 )); then
+    position=$((amount * amount * 25))
+  else
+    amount=$((amount - 400))
+    position=$((4000000 + 2 * (amount * 10000 + amount * amount * amount)))
+  fi
+  # Round after reflection, so the endpoint cannot arrive prematurely.
+  (( reverse )) && position=$((16000000 - position))
+  stars_eased=$((position / 16000))
+  return 0
 }
 
 function ez_stars_color() {
@@ -311,8 +336,7 @@ function ez_stars_spawn() {
 
 function ez_stars_sweep() {
   local row=$1 col=$2 cycle=$3 phase=$4
-  local travel=$((stars_duration * 7 / 10)) rise=$((stars_duration * 6 / 100))
-  local tail=$((stars_duration - travel - rise)) distance arrival local_phase
+  local rise=$stars_rise tail=$stars_tail distance arrival local_phase
   local bottom=${stars_sweep_bottom:-$stars_bottom}
   stars_white=0 stars_color_cycle=$cycle
   if (( cycle > 0 && phase < stars_duration )); then
@@ -348,7 +372,7 @@ function ez_stars_twinkle_weight() {
 
 function ez_stars_tick() {
   local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token piece style
-  local index start count=${#stars_cells[@]}
+  local index count=${#stars_cells[@]}
   local sweeping=0 stable=0
   stars_output=''
   cycle=$((elapsed / stars_period)) phase=$((elapsed % stars_period))
@@ -361,14 +385,28 @@ function ez_stars_tick() {
   if (( elapsed >= stars_next )); then
     ez_stars_twinkle_weight "$elapsed"
     if (( count && RANDOM % 1000 < stars_spawn_weight )); then
-      start=$(((RANDOM * 32768 + RANDOM) % count))
+      # Rejection sampling gives new twinkles the same horizon weighting as the
+      # field, without duplicating cells or spawning groups. Bound retries even
+      # when every available cell already has a twinkle.
       for ((index = 0; index < count; index++)); do
-        cell=${stars_cells[(start + index) % count]}
+        cell=${stars_cells[(RANDOM * 32768 + RANDOM) % count]}
+        row=$((cell / COLUMNS + 1))
+        (( (RANDOM * 32768 + RANDOM) % stars_density_max < ${stars_density[row]:-$stars_density_max} )) || continue
         if [[ ! ${stars_birth[$cell]+present} ]]; then
           ez_stars_spawn "$cell" "$elapsed"
           break
         fi
       done
+      # Tiny or crowded fields can exhaust retries; still fill one free cell
+      # when an opportunity succeeds, as before horizon weighting.
+      if (( index == count )); then
+        for cell in "${stars_cells[@]}"; do
+          if [[ ! ${stars_birth[$cell]+present} ]]; then
+            ez_stars_spawn "$cell" "$elapsed"
+            break
+          fi
+        done
+      fi
     fi
     # One birth at most per frame; never catch up missed time with a burst.
     stars_next=$((elapsed + 1 + (RANDOM * 32768 + RANDOM) % stars_twinkle_delay))

@@ -256,17 +256,17 @@ to_r=$stars_r to_g=$stars_g to_b=$stars_b
 ez_stars_bar_color 4000
 [[ $stars_r == "$from_r" && $stars_g == "$from_g" && $stars_b == "$from_b" ]]
 ez_stars_bar_color 4250
-(( stars_r == from_r + (to_r - from_r) * 62 / 1000 ))
-(( stars_g == from_g + (to_g - from_g) * 62 / 1000 ))
-(( stars_b == from_b + (to_b - from_b) * 62 / 1000 ))
+(( stars_r == from_r + (to_r - from_r) * 97 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 97 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 97 / 1000 ))
 ez_stars_bar_color 4500
 (( stars_r == from_r + (to_r - from_r) / 2 ))
 (( stars_g == from_g + (to_g - from_g) / 2 ))
 (( stars_b == from_b + (to_b - from_b) / 2 ))
 ez_stars_bar_color 4750
-(( stars_r == from_r + (to_r - from_r) * 937 / 1000 ))
-(( stars_g == from_g + (to_g - from_g) * 937 / 1000 ))
-(( stars_b == from_b + (to_b - from_b) * 937 / 1000 ))
+(( stars_r == from_r + (to_r - from_r) * 902 / 1000 ))
+(( stars_g == from_g + (to_g - from_g) * 902 / 1000 ))
+(( stars_b == from_b + (to_b - from_b) * 902 / 1000 ))
 ez_stars_bar_color 5000
 [[ $stars_r == "$to_r" && $stars_g == "$to_g" && $stars_b == "$to_b" ]]
 settled_bg=$stars_bar_bg
@@ -278,8 +278,8 @@ printf 'PASS responsive hint sweep and eased status-bar colors\n'
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1
 EZ_MENU_TWINKLE_ADVANCE_MS=invalid EZ_MENU_TWINKLE_RATE_PERCENT=0
 ez_stars_init
-[[ $stars_period == 4000 && $stars_duration == 1000 && $stars_step == 70 ]]
-[[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 200 && $stars_twinkle_delay == 250 ]]
+[[ $stars_period == 4000 && $stars_duration == 1467 && $stars_step == 70 ]]
+[[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 250 && $stars_twinkle_delay == 200 ]]
 printf 'PASS invalid animation settings use safe defaults\n'
 
 # Advancing translates the same curve; the rate changes waiting times, not weights.
@@ -291,7 +291,7 @@ for instant in 0 500 1500 3000 3999; do
   ez_stars_twinkle_weight "$instant"
   [[ $stars_spawn_weight == "$baseline_weight" ]]
 done
-for rate in 100 200; do
+for rate in 100 250; do
   EZ_MENU_TWINKLE_RATE_PERCENT=$rate
   ez_stars_init
   stars_cells=() stars_char=() stars_text_char=()
@@ -309,27 +309,29 @@ for rate in 100 200; do
     [[ $stars_spawn_weight == "$baseline_weight" ]]
   fi
 done
-(( fast_wait * 100 > base_wait * 45 && fast_wait * 100 < base_wait * 55 ))
+(( fast_wait * 100 > base_wait * 36 && fast_wait * 100 < base_wait * 44 ))
 printf 'PASS earlier probability cycle and multiplicative spawn frequency\n'
 
 # The front starts slowly, crosses the middle quickly, and slows at the end.
+EZ_MENU_SWEEP_DURATION_MS=1000
+ez_stars_init
 COLUMNS=101 stars_top=1 stars_bottom=101 stars_sweep_bottom=101
 ez_stars_sweep 1 50 1 200
 [[ $stars_white == 0 && $stars_color_cycle == 0 ]]
 ez_stars_sweep 101 50 1 500
 (( stars_white > 0 ))
 # Arrival changes; each position still takes 60 ms to peak and 240 ms to fade.
-for position in '1 50 277' '101 50 422'; do
+for position in '1 50 280' '101 50 420'; do
   read -r row col arrival <<< "$position"
   ez_stars_sweep "$row" "$col" 1 "$((arrival + 60))"
   [[ $stars_white == 1000 ]]
   ez_stars_sweep "$row" "$col" 1 "$((arrival + 300))"
   [[ $stars_white == 0 && $stars_color_cycle == 1 ]]
 done
-for duration in 300 1000 2500; do
+for duration in 300 1000 1467 2500; do
   EZ_MENU_SWEEP_DURATION_MS=$duration
   ez_stars_init
-  travel=$((duration * 7 / 10)) previous=-1
+  travel=$stars_travel previous=-1
   [[ ${stars_sweep_arrival[0]} == 0 && ${stars_sweep_arrival[1000]} == "$travel" ]]
   (( stars_sweep_arrival[500] == travel / 2 ))
   (( stars_sweep_arrival[250] > travel * 3 / 8 && stars_sweep_arrival[750] < travel * 5 / 8 ))
@@ -339,3 +341,65 @@ for duration in 300 1000 2500; do
   done
 done
 printf 'PASS eased diagonal movement, unchanged flash durations, and scalable arrival times\n'
+
+# Default timing keeps the previous cubic's 3/700 peak speed. Broad quarter-
+# distance bands now get ~467 ms each instead of the old ~278 ms.
+EZ_MENU_SWEEP_DURATION_MS=1467
+ez_stars_init
+[[ $stars_rise == 60 && $stars_tail == 240 && $stars_travel == 1167 ]]
+(( stars_sweep_arrival[250] >= 466 && stars_sweep_arrival[750] <= 701 ))
+ez_stars_sweep_ease 499
+before=$stars_eased
+ez_stars_sweep_ease 500
+distance=$((stars_eased - before))
+# Finite differences allow integer coordinate rounding; target ~4.286/s.
+(( distance * 1000000 / stars_travel >= 4200 ))
+(( distance * 1000000 / stars_travel <= 4400 ))
+for progress in 100 250 400 499; do
+  ez_stars_sweep_ease "$progress"
+  before=$stars_eased
+  ez_stars_sweep_ease "$((1000 - progress))"
+  (( stars_eased + before >= 999 && stars_eased + before <= 1000 ))
+done
+printf 'PASS broad slow edges, symmetric movement, and preserved default peak speed\n'
+
+# Count real generated stars over many columns, including protected text rows.
+EZ_MENU_HORIZON_DENSITY_PERCENT=600
+ez_stars_init
+COLUMNS=800 LINES=30 visible=4 option_left=350 option_right=350
+hint_rows=('controls')
+RANDOM=4871
+ez_stars_layout 10 5 53 2
+[[ ${stars_density[$stars_top]} == 1000 && ${stars_density[$stars_bottom]} == 6000 ]]
+top_count=0 bottom_count=0
+for cell in "${!stars_char[@]}"; do
+  row=$((cell / COLUMNS + 1))
+  if (( row == stars_top )); then top_count=$((top_count + 1)); fi
+  if (( row == stars_bottom )); then bottom_count=$((bottom_count + 1)); fi
+done
+(( top_count > 60 && top_count < 150 && bottom_count > 520 && bottom_count < 680 ))
+(( bottom_count > top_count * 4 ))
+for ((row = stars_top + 1; row <= stars_bottom; row++)); do
+  (( stars_density[row] >= stars_density[row-1] ))
+done
+[[ ${stars_fade[$stars_bottom]} == 5 ]]
+# Equal-size top/bottom samples isolate spatial bias from row width and masking.
+stars_cells=()
+for ((col = 0; col < 80; col++)); do
+  stars_cells+=("$(((stars_top - 1) * COLUMNS + col))" "$(((stars_bottom - 1) * COLUMNS + col))")
+done
+stars_char=() stars_birth=() stars_text_char=()
+upper=0 lower=0
+for ((trial = 0; trial < 600; trial++)); do
+  stars_next=0 stars_birth=() stars_char=()
+  ez_stars_tick 2000
+  for cell in "${!stars_birth[@]}"; do
+    if (( cell / COLUMNS + 1 == stars_top )); then upper=$((upper + 1)); else lower=$((lower + 1)); fi
+  done
+done
+(( lower > upper * 4 && lower < upper * 9 ))
+EZ_MENU_HORIZON_DENSITY_PERCENT=100
+ez_stars_init
+ez_stars_layout 10 5 53 2
+for density in "${stars_density[@]}"; do [[ $density == 1000 ]]; done
+printf 'PASS denser dim horizon, weighted single twinkles, and flat-density override\n'

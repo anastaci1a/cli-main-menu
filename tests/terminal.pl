@@ -192,6 +192,11 @@ $marker=length $buf;
 $pty->set_winsize(12,36,0,0);
 pump(1.3);
 my $small_output=substr($buf,$marker);
+# A frame composed before SIGWINCH can still be in flight. Check the latest
+# complete repaint, which supersedes those bytes on the actual terminal.
+my $small_home=rindex($small_output,"\e[H");
+die 'resize did not repaint from home' if $small_home < 0;
+$small_output=substr($small_output,$small_home);
 die 'resize did not use compact title' unless plain($small_output) =~ /SATELLITE/;
 die 'resize lost selection' unless $small_output =~ /\e\[1mTwo/;
 die 'narrow screen still contains block title' if plain($small_output) =~ /#####  ###/;

@@ -24,12 +24,18 @@
   disabled styling, and all-or-nothing disabled explanations.
 - Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
   geometry on resize; preserve the text mask and downward fade even at peak white.
-- Twinkles permanently replace their base stars, finish before sweeps, and fade
-  out more slowly than they brighten. Animation updates must not launch processes
+- Twinkles permanently replace their base stars and fade out more slowly than
+  they brighten. Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
 - Spawn twinkles individually. Keep each star's randomized saturation stable.
 - Keep star hue offsets stable and bounded around one center, concentrated with
   a Gaussian-like distribution rather than independently cycling palette hues.
+- Extend the star field past hints when rows permit, and stretch the option-row
+  brightness falloff to the field's last row. Mask title, option, page, and hint
+  text; the footer may fade into full-width darkness.
+- Weight individual twinkle opportunities smoothly through the sweep. A sweep
+  reduces their frequency but must never switch births off abruptly. Existing
+  twinkles continue their fade and share the crossing white/hue treatment.
 - Sweep title/number/hint accents using the shared spatial phase and complementary
   palette; preserve bold/disabled styles. Accent cells must never be spawn targets.
 - Status backgrounds interpolate to the settled hint color during each sweep.

@@ -32,25 +32,39 @@ printf 'PASS bounded Gaussian-like hue distribution around one palette center\n'
 for COLUMNS in 5 36 80 160; do
   for visible in 1 4 15; do
     LINES=40 option_left=$((COLUMNS / 3)) option_right=$((COLUMNS / 3))
+    mapfile -t hint_rows < <(ez_menu_hint_lines)
+    hint_width=0
+    for hint in "${hint_rows[@]}"; do (( ${#hint} > hint_width )) && hint_width=${#hint}; done
+    hint_left=$(((COLUMNS - hint_width) / 2))
+    (( hint_left < 0 )) && hint_left=0
+    hint_end=$((13 + visible + ${#hint_rows[@]}))
     title_width=$((COLUMNS / 2)) title_left=$(((COLUMNS - title_width) / 2))
     ez_stars_layout 10 5 "$title_width" 2
     for cell in "${stars_cells[@]}"; do
       row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
-      (( row >= 3 && row <= 12 + visible && col < COLUMNS ))
+      (( row >= 3 && row <= hint_end + 2 && row < LINES && col < COLUMNS ))
       if (( row >= 5 && row < 10 )); then
         (( col < title_left - 2 || col >= title_left + title_width + 2 ))
-      elif (( row >= 12 )); then
+      elif (( row >= 12 && row <= 13 + visible )); then
         (( col < option_left - 3 || col >= COLUMNS - option_right + 3 ))
+      elif (( row >= 14 + visible && row <= hint_end )); then
+        (( col < hint_left - 3 || col >= hint_left + hint_width + 3 ))
       fi
     done
-    [[ ${stars_fade[13]} == 65 || $visible == 1 ]]
-    (( visible == 1 )) || [[ ${stars_fade[12+visible]} == 5 ]]
+    [[ ${stars_fade[13]} == 65 && ${stars_fade[$stars_bottom]} == 5 ]]
+    (( stars_fade[12+visible] > 5 ))
+    for ((row = 14; row <= stars_bottom; row++)); do (( stars_fade[row] <= stars_fade[row-1] )); done
     for cell in "${!stars_char[@]}"; do
       (( stars_saturation[$cell] >= stars_sat[${stars_palette[$cell]}] && stars_saturation[$cell] <= 800 ))
     done
   done
 done
-printf 'PASS scalable text masks, row brightness, and randomized saturation bounds\n'
+LINES=18 COLUMNS=80 visible=3
+mapfile -t hint_rows < <(ez_menu_hint_lines)
+ez_stars_layout 10 5 53 2
+[[ $stars_bottom == 17 && ${stars_fade[17]} == 5 ]]
+hint_rows=()
+printf 'PASS extended field, text masks, stretched fade, and saturation bounds\n'
 
 # Three fixed stars span the sweep's diagonal; suppress random births.
 COLUMNS=80 stars_top=3 stars_bottom=16 stars_sweep_bottom=16
@@ -98,22 +112,47 @@ ez_stars_tick 1100
 [[ -z $stars_output ]]
 printf 'PASS fast eased twinkle, slow fade, and permanent collision removal\n'
 
-for instant in 3600 4000 4500 4999; do
-  stars_next=0
-  ez_stars_tick "$instant"
-  [[ ${#stars_birth[@]} == 0 ]]
+# The probability envelope is periodic, smooth and nonzero through the sweep.
+ez_stars_twinkle_weight 4000
+edge_weight=$stars_spawn_weight
+ez_stars_twinkle_weight 4500
+[[ $stars_spawn_weight == 200 ]]
+ez_stars_twinkle_weight 5000
+[[ $stars_spawn_weight == "$edge_weight" ]]
+ez_stars_twinkle_weight 6500
+[[ $stars_spawn_weight == 1000 ]]
+previous=-1
+for ((instant = 0; instant <= 8000; instant += 10)); do
+  ez_stars_twinkle_weight "$instant"
+  (( stars_spawn_weight >= 200 && stars_spawn_weight <= 1000 ))
+  if (( previous >= 0 )); then (( stars_spawn_weight - previous <= 9 && previous - stars_spawn_weight <= 9 )); fi
+  previous=$stars_spawn_weight
 done
-stars_next=0
-ez_stars_tick 5100
-[[ ${stars_birth[160]} == 5100 ]]
-(( stars_next > 5100 && stars_next <= 5600 ))
-ez_stars_tick 6000
-[[ ${#stars_birth[@]} == 0 ]]
-printf 'PASS random birth scheduling and twinkle-free sweeps\n'
+RANDOM=1801
+during=0 between=0
+for instant in 4500 6500; do
+  for ((trial = 0; trial < 200; trial++)); do
+    stars_char=() stars_birth=() stars_next=0
+    ez_stars_tick "$instant"
+    if [[ ${stars_birth[160]+present} ]]; then
+      if (( instant == 4500 )); then during=$((during + 1)); else between=$((between + 1)); fi
+    fi
+    (( stars_next > instant && stars_next <= instant + 500 ))
+  done
+done
+(( during > 10 && during < 80 && between == 200 ))
+stars_char=() stars_birth=() stars_next=999999
+ez_stars_spawn 160 3950
+ez_stars_tick 4050
+[[ ${stars_birth[160]} == 3950 && $stars_r -gt 0 ]]
+ez_stars_tick 4850
+[[ ! ${stars_birth[160]+present} && ! ${stars_char[160]+present} ]]
+printf 'PASS smooth weighted births, fewer during sweeps, and uninterrupted overlapping fades\n'
 
 # Deadlines create exactly one star when space is available, even after a pause.
 stars_char=() stars_birth=() stars_cells=(160 161 162 163 164 165 166 167)
-for ((instant = 100; instant <= 170; instant += 10)); do
+instant=2500
+for ((trial = 0; trial < 8; trial++)); do
   before=${#stars_birth[@]} stars_next=0
   ez_stars_tick "$instant"
   (( ${#stars_birth[@]} == before + 1 ))
@@ -122,7 +161,7 @@ done
 saved_saturation=$(declare -p stars_saturation)
 saved_hues=$(declare -p stars_hue_offset)
 stars_next=999999
-ez_stars_tick 200
+ez_stars_tick 2600
 [[ $(declare -p stars_saturation) == "$saved_saturation" ]]
 [[ $(declare -p stars_hue_offset) == "$saved_hues" ]]
 printf 'PASS single births, sub-half-second delays, and stable per-star saturation\n'
@@ -164,7 +203,7 @@ for COLUMNS in 20 36 80; do
   mapfile -t hint_rows < <(ez_menu_hint_lines)
   ez_stars_layout 6 1 2 2
   ez_stars_text_layout 6 2 2 0 0 0 1
-  [[ $stars_sweep_bottom == $((6 + visible + 3 + ${#hint_rows[@]})) ]]
+  [[ $stars_sweep_bottom == $((6 + visible + 5 + ${#hint_rows[@]})) ]]
   hint_cell=''
   for cell in "${!stars_text_char[@]}"; do
     if [[ ${stars_text_palette[$cell]} == 4 ]]; then

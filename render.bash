@@ -218,7 +218,10 @@ function ez_menu_draw() {
       "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding" "$right_stars"
   done
   if (( ${ez_stars_animated:-0} )); then
-    printf '\r%*s\r' "${COLUMNS:-80}" ''
+    screen_row=$(( ${#fitted_rows[@]} + visible + 3 ))
+    printf '\r'
+    ez_stars_render_span "$screen_row" 0 "$COLUMNS"
+    printf '\r'
   else
     printf '\r\033[2K'
   fi
@@ -226,9 +229,13 @@ function ez_menu_draw() {
     printf -v page '%d-%d of %d' "$((first + 1))" "$((first + visible))" "${#labels[@]}"
     indent=$(( (${COLUMNS:-80} - ${#page}) / 2 ))
     (( indent < 0 )) && indent=0
-    printf '%*s%s%s%s' "$indent" '' "$C_STAR_LAVENDER" "$page" "$C_RESET"
+    if (( ${ez_stars_animated:-0} )); then
+      printf '\033[%d;%dH%s%s%s' "$screen_row" "$((indent + 1))" "$C_STAR_LAVENDER" "${page:0:COLUMNS}" "$C_RESET"
+    else
+      printf '%*s%s%s%s' "$indent" '' "$C_STAR_LAVENDER" "$page" "$C_RESET"
+    fi
   fi
-  printf '\n'
+  printf '\r\n'
   mapfile -t hints < <(ez_menu_hint_lines)
   for hint in "${hints[@]}"; do
     (( ${#hint} > hint_width )) && hint_width=${#hint}
@@ -246,4 +253,11 @@ function ez_menu_draw() {
       printf '\r\033[2K%*s%s%s%s\n' "$indent" '' "$C_STAR_LAVENDER" "$hint" "$C_RESET"
     fi
   done
+  if (( ${ez_stars_animated:-0} )); then
+    for ((; screen_row <= stars_bottom; screen_row++)); do
+      printf '\r'
+      ez_stars_render_span "$screen_row" 0 "$COLUMNS"
+      printf '\r\n'
+    done
+  fi
 }

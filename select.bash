@@ -19,6 +19,7 @@ function ez_menu_choose() (
   local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
   local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
+  local stars_spawn_weight
   local -a stars_cells stars_fade stars_hue stars_sat stars_value
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
@@ -145,7 +146,7 @@ function ez_menu_choose() (
         visible=$count
         (( visible > available_rows )) && visible=$available_rows
         read -r number_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
-        new_star_key="$COLUMNS:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
+        new_star_key="$COLUMNS:$LINES:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
           if (( ez_stars_animated )); then
             actual_title_width=$title_width
@@ -154,7 +155,7 @@ function ez_menu_choose() (
               actual_title_width=${#row}
               (( actual_title_width > COLUMNS )) && actual_title_width=$COLUMNS
             fi
-            ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin"
+            ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin" "$count"
           else
             # Keep three clear cells beside the entire option block, including >.
             left_gutter=3 right_gutter=3

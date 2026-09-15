@@ -94,12 +94,23 @@ bottom right. Stars quickly approach white, then slowly regain saturation with
 a 70° hue shift that persists after the band passes. The row brightness fade is
 applied even to white peaks, so the bottom stays dimmer.
 
-Each star gets a random baseline saturation between its palette color's original
-saturation and 80%, retained for its lifetime. The title and option numbers
+Stars share one central hue, with stable offsets in a 60° total range (±30°).
+The offsets approximate a Gaussian distribution with a 10° standard deviation,
+so most are near the center. Each star also gets a random baseline saturation
+between its palette color's original saturation and 80%, retained for its lifetime.
+The title and option numbers
 (including the selection arrow) join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
 70° per sweep. Title/selection bolding and disabled-number strike/dimming remain
-intact; option labels and hints keep their normal styling.
+intact; option labels keep their normal styling. Control hints share the title
+hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
+During each sweep the full-width status background linearly interpolates from
+the previous settled hint color to the next, then holds that color.
+
+Clock ticks update the status bar alone; navigation repaints the option area.
+Full repairs on focus, resize, Ctrl-L, and a five-second fallback paint the final
+animated cells directly, avoiding blank or original-color underlays that caused
+title flicker. The fallback still repairs terminals that omit focus events.
 
 Override these settings in ignored `config.bash`, then source `.bashrc`:
 
@@ -109,6 +120,7 @@ EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
+EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/number hue
 ```
 
@@ -156,7 +168,7 @@ goes to stderr; stdout returns the selected zero-based index.
   running and stopped shell jobs and offers foreground/termination actions.
 - Disabled Jobs has a dark purple struck number and a dark gray struck label;
   its `(no stopped jobs)` explanation is not struck through.
-- The menu uses an alternate screen and repaints on focus/resize and clock ticks.
+- The menu uses an alternate screen and repairs on focus/resize and periodically.
   It restores terminal modes before launching an action or returning to the shell.
 
 ## Validation

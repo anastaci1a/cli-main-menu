@@ -7,6 +7,7 @@ EZ_MENU_SWEEP_INTERVAL_MS=4000
 EZ_MENU_SWEEP_DURATION_MS=1000
 EZ_MENU_SWEEP_HUE_STEP=70
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
+EZ_MENU_STAR_HUE_SPREAD=60      # total range, centered with a Gaussian-like distribution
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # title/numbers opposite the star palette's center
 
 # Colors from theme.bash can also be overridden in config.bash. For example:

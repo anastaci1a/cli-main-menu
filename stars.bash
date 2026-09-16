@@ -676,7 +676,7 @@ function ez_stars_try_spawn() {
 function ez_stars_tick() {
   stars_repair_active=0
   local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token style
-  local emit_limit=${2:--1} rgb
+  local emit_limit=${2:--1}
   local sweeping=0 stable=0 stars_spawned=0 trusted_work=0 birth replacement seen
   local arrival local_phase expected distance bottom=${stars_sweep_bottom:-$stars_bottom}
   local rgb_key value fade palette saturation offset peak sweep_white active_flash pair tag next_tag
@@ -808,7 +808,7 @@ function ez_stars_tick() {
        stars_b = ((value & 255) * color_weight + white_value) * intensity / 1000000000, 1 ))
     token="$stars_r;$stars_g;$stars_b:$style:$char"
     if [[ $seen != "$token" ]]; then
-      updates[cell]=$token stars_seen[$cell]=$token
+      updates[cell]=$token stars_seen[$cell]=$token stars_cell_render[$cell]=$token
     fi
   done
   for cell in "${work_text[@]}"; do
@@ -845,7 +845,7 @@ function ez_stars_tick() {
        stars_b = ((value & 255) * color_weight + white_value) * fade / 100000, 1 ))
     token="$stars_r;$stars_g;$stars_b:$style:${stars_text_char[$cell]}"
     if [[ $seen != "$token" ]]; then
-      updates[cell]=$token stars_text_seen[$cell]=$token
+      updates[cell]=$token stars_text_seen[$cell]=$token stars_cell_render[$cell]=$token
     fi
   done
   stars_render_cycle=$cycle stars_was_sweeping=$sweeping
@@ -854,15 +854,11 @@ function ez_stars_tick() {
   stars_star_dirty=()
   # A foreground repair will paint these cells from the final cache. Avoid
   # encoding a second, unused copy of their cursor/style/color output.
-  if (( emit_limit >= 0 )); then
+  if (( emit_limit == 0 )); then
+    updates=()
+  elif (( emit_limit > 0 )); then
     for cell in "${!updates[@]}"; do
-      (( cell >= emit_limit )) || continue
-      token=${updates[cell]} rgb=${token%%:*} token=${token#*:}
-      style=${token%%:*} char=${token#*:}
-      if [[ -n $rgb ]]; then
-        stars_cell_render[$cell]=$'\033[0;'"${style}m"$'\033[38;2;'"${rgb}m$char"$'\033[0m'
-      fi
-      unset 'updates[cell]'
+      (( cell < emit_limit )) || unset 'updates[cell]'
     done
   fi
   ez_stars_emit
@@ -887,9 +883,6 @@ function ez_stars_emit() {
     next_cell=$((cell + 1)) sgr=''
     token=${updates[cell]} rgb=${token%%:*} token=${token#*:}
     style=${token%%:*} char=${token#*:}
-    if [[ -n $rgb ]]; then
-      stars_cell_render[$cell]=$'\033[0;'"${style}m"$'\033[38;2;'"${rgb}m$char"$'\033[0m'
-    fi
     if (( style != active_style )); then
       if (( active_style < 0 )); then sgr="0;$style";
       else
@@ -911,6 +904,9 @@ function ez_stars_emit() {
   return 0
 }
 
+# Cache compact RGB:style:glyph tokens, not preformatted escape sequences. This
+# avoids constructing and then parsing ANSI for every animated cell, and lets
+# repairs combine style and color into one command without splitting UTF-8.
 # Full/partial foreground redraws use the same final cells as animation updates.
 # No original pink title or empty star field is painted underneath an overlay.
 function ez_stars_render_span() {
@@ -918,23 +914,20 @@ function ez_stars_render_span() {
     ez_stars_render_sparse_span "$@"
     return
   fi
-  local row=$1 left=$2 width=$3 col cell result='' rendered prefix active='' char
+  local row=$1 left=$2 width=$3 col cell result='' rendered prefix active='' char rgb style active_style=0
   for ((col = left; col < left + width; col++)); do
     cell=$(((row - 1) * COLUMNS + col))
     rendered=${stars_cell_render[$cell]-}
     if [[ -n $rendered ]]; then
-      # Separate the whole glyph from its last SGR, without splitting UTF-8.
-      rendered=${rendered%$'\033[0m'}
-      char=${rendered##*$'\033['}
-      char=${char#*m}
-      prefix=${rendered:0:${#rendered}-${#char}}
-      # Cached prefixes already begin with SGR 0; avoid another reset per run.
-      if [[ $prefix != "$active" ]]; then result+=$prefix; active=$prefix; fi
+      rgb=${rendered%%:*} rendered=${rendered#*:}
+      style=${rendered%%:*} char=${rendered#*:}
+      prefix=$'\033[0;'"$style;38;2;${rgb}m"
+      if [[ $prefix != "$active" ]]; then result+=$prefix; active=$prefix; active_style=$style; fi
       result+=$char
     else
       # Preserve color across spaces to batch whole title/hint runs, but never
       # extend a disabled marker's strikethrough into adjacent empty cells.
-      if [[ $active == *$'\033[0;9m'* ]]; then result+=$'\033[0m'; active=''; fi
+      if (( active_style == 9 )); then result+=$'\033[0m'; active='' active_style=0; fi
       result+=' '
     fi
   done
@@ -956,7 +949,7 @@ function ez_stars_prepare_repair() {
 }
 
 function ez_stars_render_sparse_span() {
-  local row=$1 left=$2 width=$3 cursor right cell gap rendered prefix char active='' result=''
+  local row=$1 left=$2 width=$3 cursor right cell gap rendered prefix char active='' result='' rgb style active_style=0
   local low high middle count=${#stars_repair_cells[@]}
   if (( width > ${#stars_repair_spaces} )); then printf -v stars_repair_spaces '%*s' "$width" ''; fi
   (( cursor = (row - 1) * COLUMNS + left, right = cursor + width, 1 ))
@@ -978,17 +971,17 @@ function ez_stars_render_sparse_span() {
     (( cell < cursor )) && continue
     gap=$((cell - cursor))
     if (( gap )); then
-      if [[ $active == *$'\033[0;9m'* ]]; then result+=$'\033[0m'; active=''; fi
+      if (( active_style == 9 )); then result+=$'\033[0m'; active='' active_style=0; fi
       result+=${stars_repair_spaces:0:gap}
     fi
-    rendered=${stars_cell_render[$cell]%$'\033[0m'}
-    char=${rendered##*$'\033['} char=${char#*m}
-    prefix=${rendered:0:${#rendered}-${#char}}
-    if [[ $prefix != "$active" ]]; then result+=$prefix; active=$prefix; fi
+    rendered=${stars_cell_render[$cell]} rgb=${rendered%%:*} rendered=${rendered#*:}
+    style=${rendered%%:*} char=${rendered#*:}
+    prefix=$'\033[0;'"$style;38;2;${rgb}m"
+    if [[ $prefix != "$active" ]]; then result+=$prefix; active=$prefix; active_style=$style; fi
     result+=$char cursor=$((cell + 1))
   done
   if (( cursor < right )); then
-    [[ $active != *$'\033[0;9m'* ]] || result+=$'\033[0m'
+    (( active_style != 9 )) || result+=$'\033[0m'
     result+=${stars_repair_spaces:0:right-cursor}
   fi
   printf '%s\033[0m' "$result"

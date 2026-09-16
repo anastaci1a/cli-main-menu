@@ -29,11 +29,12 @@ ez_stars_build_work
 [[ -z ${BENCH_CAPTURE:-} ]] || exec 3>"$BENCH_CAPTURE"
 printf 'elapsed_ms,render_us,bytes\n'
 for ((elapsed = 0; elapsed < 10000; elapsed += 250)); do
+  [[ ${BENCH_INCLUDE_TICK:-0} != 1 ]] || started=${EPOCHREALTIME/./}
   ez_stars_tick "$elapsed" 0
   ez_stars_bar_color "$elapsed"
-  started=${EPOCHREALTIME/./}
+  [[ ${BENCH_INCLUDE_TICK:-0} == 1 ]] || started=${EPOCHREALTIME/./}
   frame=$(
-    [[ -n ${5:-} ]] || ez_stars_prepare_repair
+    [[ -n ${5:-} && ${BENCH_REFERENCE_CACHE:-0} != 1 ]] || ez_stars_prepare_repair
     printf '\033[H'
     for ((row = 1; row <= ${#fitted_rows[@]} + 2; row++)); do
       ez_stars_render_span "$row" 0 "$COLUMNS"

@@ -78,12 +78,12 @@ ez_stars_tick 3999
 original=${stars_seen[160]}
 ez_stars_tick 4060
 [[ ${stars_seen[160]} == '255;255;255:1:.' ]]
-[[ ${stars_cell_render[160]} == $'\033[0;1m'* ]]
+[[ ${stars_cell_render[160]} == '255;255;255:1:.' ]]
 [[ ${stars_seen[239]} == "${original%:*}:+" ]]
 ez_stars_tick 4080
 [[ ${stars_seen[160]} == *':1:.' ]]
 ez_stars_tick 4120
-[[ ${stars_seen[160]} == *':0:.' && ${stars_cell_render[160]} == $'\033[0;0m'* ]]
+[[ ${stars_seen[160]} == *':0:.' && ${stars_cell_render[160]} == "${stars_seen[160]}" ]]
 ez_stars_tick 4410
 [[ ${stars_seen[239]} == '255;255;255:1:+' ]]
 ez_stars_tick 4760
@@ -197,7 +197,7 @@ distance=$(((39 * 1000 / 79 + (5 - stars_top) * 1000 / (stars_bottom - stars_top
 arrival=${stars_sweep_arrival[distance]}
 ez_stars_tick "$((4000 + arrival + 60))"
 [[ ${stars_text_seen[$title_cell]} == '255;255;255:1:A' ]]
-[[ ${stars_cell_render[$title_cell]} == $'\033[0;1m'* ]]
+[[ ${stars_cell_render[$title_cell]} == '255;255;255:1:A' ]]
 ez_stars_tick 5000
 [[ ${stars_text_seen[$title_cell]} != "$original_accent" ]]
 [[ ${stars_text_seen[$title_cell]} == *':0:A' && ${stars_text_seen[$marker_cell]} == *':1:●' ]]
@@ -221,8 +221,8 @@ printf 'PASS complementary circle markers, shared sweep, scrolling, and disabled
   for count in 3 10 100; do
     [[ $(ez_menu_option_layout "${labels[@]:0:count}") == '1 5 7 36 37' ]]
   done
-  prefix=$'\033[0;0m\033[38;2;1;2;3m'
-  stars_cell_render=([0]="$prefix○$C_RESET" [1]="$prefix○$C_RESET" [2]="$prefix●$C_RESET" [3]="${prefix}m$C_RESET")
+  prefix=$'\033[0;0;38;2;1;2;3m'
+  stars_cell_render=([0]='1;2;3:0:○' [1]='1;2;3:0:○' [2]='1;2;3:0:●' [3]='1;2;3:0:m')
   [[ $(ez_stars_render_span 1 0 4) == "$prefix○○●m$C_RESET" ]]
 )
 printf 'PASS fixed marker columns and intact UTF-8 glyphs in batched redraws\n'
@@ -688,9 +688,8 @@ printf 'PASS packed-color cache wraparound, custom hue steps, skipped cycles, an
 
 (
   stars_cell_render=()
-  normal=$'\033[0;0m\033[38;2;100;150;200m'
-  strike=$'\033[0;9m\033[38;2;40;50;60m'
-  stars_cell_render=([0]="$normal○$C_RESET" [1]="$strike●$C_RESET" [7]="${normal}m$C_RESET" [10]="${normal}*$C_RESET" [159]="${strike}+$C_RESET" [170]="${normal}.$C_RESET")
+  normal='100;150;200:0:' strike='40;50;60:9:'
+  stars_cell_render=([0]="$normal○" [1]="$strike●" [7]="${normal}m" [10]="${normal}*" [159]="${strike}+" [170]="${normal}." [171]="${normal}:")
   spans=('1 0 80' '1 0 0' '1 1 3' '3 0 30' '1 0 80' '2 75 5')
   for COLUMNS in 1 80; do
     stars_repair_active=0

@@ -111,7 +111,7 @@ ez_stars_tick 800
 [[ $stars_r -gt 0 && $stars_r -lt 100 && ${stars_char[160]+present} ]]
 ez_stars_tick 1000
 [[ ! ${stars_char[160]+present} && ! ${stars_birth[160]+present} ]]
-[[ $stars_output == *$'\033[3;1H '* ]]
+[[ $stars_output == *$'\033[3;1H\033[0;0m '* ]]
 stars_seen=()
 ez_stars_tick 1100
 [[ -z $stars_output ]]

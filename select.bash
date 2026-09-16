@@ -24,6 +24,12 @@ function ez_menu_choose() (
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
   local stars_density_max
   local stars_horizon_delay stars_horizon_next
+  local stars_geometry_key
+  local -a stars_flash stars_arrival_cell stars_settled stars_text_settled
+  local -a stars_star_band stars_text_band stars_text_dirty
+  local stars_work_ready stars_work_dirty stars_last_elapsed stars_last_phase
+  local -a stars_cached_target stars_cached_prev stars_cached_next stars_prefetch_cells
+  local stars_prefetch_cycle stars_prefetch_cursor
   local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
@@ -189,7 +195,12 @@ function ez_menu_choose() (
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected"
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
+          if [[ ${text_cache_key%:*} == "$new_star_key:$first" ]]; then
+            ez_stars_select "$first" "$selected" "${#fitted_rows[@]}"
+          else
+            ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
+            ez_stars_build_work
+          fi
           text_cache_key=$new_text_key
         fi
         status_line=$(ez_menu_status_text)

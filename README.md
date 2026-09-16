@@ -237,6 +237,48 @@ node tools/render-preview.cjs /tmp/satellite-frames.ansi media
 These rendering dependencies are only for the README preview; the menu needs
 none of them at runtime.
 
+### Renderer performance
+
+The animation still targets 20 FPS with the same cells, colors, timing, random
+draws, and effects. The renderer groups changed cells into ordered output runs,
+reuses cursor/style/color state, and visits only active twinkles and the moving
+shimmer band. Integer lookup tables preserve the original easing exactly.
+Upcoming hues are prepared in small idle-frame batches, and arrow movement
+updates the affected markers without rebuilding the field.
+
+Measured over two identical runs on x86_64 Linux / Bash 5.3.3:
+
+| Viewport / options | Mean sweep frame, before → after | 95th percentile, before → after | Output per sweep frame |
+| --- | --- | --- | --- |
+| 80×24 / 4 | 49 → 9 ms | 57 → 28 ms | 3,917 → 2,419 bytes |
+| 160×40 / 16 | 157 → 26 ms | 179 → 92 ms | 11,876 → 6,997 bytes |
+
+These timings measure Bash computation and output generation; terminal painting
+and device speed vary. The larger stress case can still exceed the 50 ms frame
+budget at the busiest point. No visual effects or density were reduced.
+
+Run a deterministic benchmark without opening the menu:
+
+```bash
+LC_ALL=C bash tools/benchmark.bash 80 24 4 > /tmp/menu-benchmark.csv
+node tools/benchmark-summary.cjs /tmp/menu-benchmark.csv
+```
+
+For renderer changes, save the original `stars.bash` before editing and compare
+actual terminal cells, including RGB, bold/strike, status colors, and repair frames:
+
+```bash
+git show HEAD:stars.bash > /tmp/stars-reference.bash
+# After editing:
+BENCH_CAPTURE=/tmp/menu-before.frames LC_ALL=C bash tools/benchmark.bash 80 24 4 /tmp/stars-reference.bash > /tmp/menu-before.csv
+BENCH_CAPTURE=/tmp/menu-after.frames LC_ALL=C bash tools/benchmark.bash 80 24 4 > /tmp/menu-after.csv
+node tools/compare-frames.cjs /tmp/menu-before.frames /tmp/menu-after.frames
+```
+
+Set `BENCH_SCENARIO=1` on both capture commands to include selection changes,
+scrolling, resizing, and a pause that skips multiple sweeps. Optimization was
+checked against 720 matching frames across normal, large, and changing layouts.
+
 ## Git
 
 This folder is its own local repository. The integrating `.bashrc` is outside

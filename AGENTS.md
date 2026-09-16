@@ -56,6 +56,13 @@
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
+- Preserve exact rendered cells when optimizing: timing, random draws, hue,
+  saturation, fade, glyphs, bold/strike, and density must not change. Compare
+  captured frames against the previous renderer using the tools below.
+- Rebuild arrival buckets after geometry/text-mask changes. Selection-only
+  movement updates dirty markers. Long pauses must settle every affected cell;
+  idle ticks visit active twinkles, not the whole field. Bound color prefetch
+  work and cache size, and do not add animation processes or runtime dependencies.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Keep input echo disabled throughout the selector, including redraws between
   reads. Restore the caller's exact terminal settings before returning or exiting.
@@ -78,6 +85,10 @@
 - Stub tmux/Codex and create isolated temporary jobs for checks. Do not attach,
   resume, or terminate the user's real sessions/jobs while testing.
 - Check `git diff --check` and inspect the staged changes before committing.
+- For performance work, use `tools/benchmark.bash` and `tools/benchmark-summary.cjs`.
+  `BENCH_CAPTURE` records actual deltas and repair frames for
+  `tools/compare-frames.cjs`; `BENCH_SCENARIO=1` also exercises selection,
+  scrolling, resize, and skipped cycles. Node is only a development dependency.
 
 ## Commit identity
 

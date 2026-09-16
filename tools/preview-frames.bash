@@ -24,6 +24,7 @@ declare -A stars_hue_offset stars_cell_render stars_text_palette
 ez_stars_init
 ez_stars_layout "${#fitted_rows[@]}" 5 "${#title_rows[0]}" 2 "${#labels[@]}"
 ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 0 1 "${labels[@]}"
+ez_stars_build_work
 status_date=$(date '+%a %b %d')
 # Match the live 20 FPS target so short white/bold peaks survive the preview.
 for ((elapsed = 0; elapsed <= 10000; elapsed += 50)); do

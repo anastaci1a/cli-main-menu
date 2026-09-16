@@ -14,6 +14,10 @@ function ez_menu_choose() (
   local compact star_margin title_height title_width cached_columns=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
   local marker_width label_width option_block_width option_left option_right
+  local ez_menu_draw_cached=0
+  local stars_repair_active=0 stars_repair_index stars_repair_last stars_repair_spaces
+  local stars_emit_limit
+  local -a stars_repair_cells
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
   local ez_stars_animated=0 input_timeout=1 actual_title_width
   local stars_now stars_origin stars_next stars_period stars_duration stars_step stars_cache_cycle
@@ -28,7 +32,7 @@ function ez_menu_choose() (
   local -a stars_flash stars_arrival_cell stars_settled stars_text_settled
   local -a stars_star_band stars_text_band stars_text_dirty
   local stars_work_ready stars_work_dirty stars_last_elapsed stars_last_phase
-  local -a stars_cached_target stars_cached_prev stars_cached_next stars_prefetch_cells
+  local -a stars_color_pair stars_prefetch_cells
   local stars_prefetch_cycle stars_prefetch_cursor
   local stars_density_percent stars_replace_head stars_replace_tail
   local -a stars_peak stars_replenish stars_replace_queue stars_star_dirty stars_band_member
@@ -170,6 +174,7 @@ function ez_menu_choose() (
         (( selected < first )) && first=$selected
         (( selected >= first + visible )) && first=$((selected - visible + 1))
         read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
+        ez_menu_draw_cached=$ez_stars_animated
         new_star_key="$COLUMNS:$LINES:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
           if (( ez_stars_animated )); then
@@ -230,7 +235,10 @@ function ez_menu_choose() (
     if (( ez_stars_animated )); then
       ez_stars_now
       elapsed=$((stars_now - stars_origin))
-      ez_stars_tick "$elapsed"
+      stars_emit_limit=-1
+      if (( full_redraw )); then stars_emit_limit=0;
+      elif (( option_frame )); then stars_emit_limit=$(( (${#fitted_rows[@]} + 2) * COLUMNS )); fi
+      ez_stars_tick "$elapsed" "$stars_emit_limit"
       ez_stars_bar_color "$elapsed"
       status_token="$stars_bar_bg:$status_line"
       if [[ $status_token != "$status_seen" ]] || (( full_redraw )); then
@@ -240,6 +248,7 @@ function ez_menu_choose() (
       if (( full_redraw )); then
         # Paint final colors directly: no blank or original-color underlay.
         frame=$(
+          ez_stars_prepare_repair
           printf '\033[H%s\r\n' "$status_output"
           for ((row = 2; row <= ${#fitted_rows[@]} + 2; row++)); do
             ez_stars_render_span "$row" 0 "$COLUMNS"
@@ -251,6 +260,7 @@ function ez_menu_choose() (
         status_output='' stars_output='' full_redraw=0 last_repair=$SECONDS
       elif (( option_frame )); then
         frame=$(
+          ez_stars_prepare_repair "$(( (${#fitted_rows[@]} + 2) * COLUMNS ))"
           printf '\033[%d;1H' "$(( ${#fitted_rows[@]} + 3 ))"
           ez_menu_draw "$selected" "$first" "$visible" "$@"
         )

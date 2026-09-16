@@ -287,6 +287,17 @@ of optimization alone.
 A further optimization pass, preserving those same frames, reduced sweep times
 to about 5 ms mean / 16 ms p95 at 80×24 and 13 ms mean / 44 ms p95 at 160×40.
 
+Foreground repairs now sort occupied cells once and fill empty stretches in
+whole runs. They reuse measured menu geometry and skip redundant animation
+output for areas they already repaint. In a 160×40 / 16-option comparison,
+full repairs fell from about 43 ms to 26 ms; animated banner construction and
+clipping fell from 23 ms to 5 ms. Both retain the same rendered cells.
+
+Sweep buckets remove consumed stars immediately, preventing empty entries from
+accumulating during long sessions. Each star's two cached RGB colors and cyclic
+hue tag share one integer, replacing three cache entries. The cache also handles
+black colors, custom hue steps, long pauses, and hue-cycle wraparound.
+
 Run a deterministic benchmark without opening the menu:
 
 ```bash
@@ -311,6 +322,10 @@ checked against 720 matching frames across normal, large, and changing layouts.
 The further pass also checks irregular frame intervals with `BENCH_JITTER=1`.
 For a reference renderer that already supports work buckets, use
 `BENCH_REFERENCE_CACHE=1` to include its caches in a fair timing comparison.
+`BENCH_TIME_OFFSET_MS` and `BENCH_HUE_STEP` exercise later cycles and custom hues.
+`tools/benchmark-foreground.bash` measures full menu repairs; its optional fourth
+and fifth arguments load reference `render.bash` and `stars.bash` files. It uses
+the same `BENCH_CAPTURE` format for comparing complete foreground frames.
 
 ## Git
 

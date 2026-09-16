@@ -9,6 +9,7 @@ EZ_MENU_TITLE=SATELLITE
 COLUMNS=${1:-80} LINES=${2:-24} visible=${3:-4} ez_stars_animated=1
 EZ_MENU_TWINKLE_RATE_PERCENT=250 EZ_MENU_HORIZON_DENSITY_PERCENT=600
 EZ_MENU_SWEEP_DURATION_MS=1467 EZ_MENU_SWEEP_INTERVAL_MS=4000
+EZ_MENU_SWEEP_HUE_STEP=${BENCH_HUE_STEP:-$EZ_MENU_SWEEP_HUE_STEP}
 RANDOM=1967
 mapfile -t title_rows < <(ez_menu_title_rows)
 mapfile -t fitted_rows <<< "$(ez_menu_banner 0 2)"
@@ -53,6 +54,7 @@ for ((elapsed = 0; elapsed < 12000; elapsed += 50)); do
   instant=$elapsed
   [[ ${BENCH_JITTER:-0} != 1 ]] || instant=$((instant + (elapsed / 50 % 4) * 7))
   [[ ${BENCH_SCENARIO:-0} != 1 ]] || (( elapsed < 9000 )) || instant=$((instant + 9000))
+  instant=$((instant + ${BENCH_TIME_OFFSET_MS:-0}))
   started=${EPOCHREALTIME/./}
   ez_stars_tick "$instant"
   ez_stars_bar_color "$instant"

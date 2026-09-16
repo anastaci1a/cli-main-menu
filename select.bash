@@ -25,6 +25,8 @@ function ez_menu_choose() (
   local stars_render_cycle stars_was_sweeping stars_frame_started stars_delay
   local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
+  local stars_rgb_value
+  local stars_bar_cycle stars_bar_from stars_bar_to stars_bar_target_bg
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
   local stars_density_max
   local stars_horizon_delay stars_horizon_next
@@ -33,7 +35,7 @@ function ez_menu_choose() (
   local -a stars_star_band stars_text_band stars_text_dirty
   local stars_work_ready stars_work_dirty stars_last_elapsed stars_last_phase
   local -a stars_color_pair stars_prefetch_cells
-  local stars_prefetch_cycle stars_prefetch_cursor
+  local stars_prefetch_cycle stars_prefetch_cursor stars_prefetch_budget
   local stars_density_percent stars_replace_head stars_replace_tail
   local -a stars_peak stars_replenish stars_replace_queue stars_star_dirty stars_band_member
   local -a stars_replacement_birth

@@ -223,7 +223,7 @@ printf 'PASS complementary circle markers, shared sweep, scrolling, and disabled
   done
   prefix=$'\033[0;0m\033[38;2;1;2;3m'
   stars_cell_render=([0]="$prefix○$C_RESET" [1]="$prefix○$C_RESET" [2]="$prefix●$C_RESET" [3]="${prefix}m$C_RESET")
-  [[ $(ez_stars_render_span 1 0 4) == "$C_RESET$prefix○○●m$C_RESET" ]]
+  [[ $(ez_stars_render_span 1 0 4) == "$prefix○○●m$C_RESET" ]]
 )
 printf 'PASS fixed marker columns and intact UTF-8 glyphs in batched redraws\n'
 
@@ -482,10 +482,10 @@ printf 'PASS half baseline quantity with unchanged horizon weights and twinkle r
   ez_stars_tick 1000
   [[ ! ${stars_char[160]+present} && ${#stars_char[@]} == 1 && ${#stars_birth[@]} == 0 ]]
   replacement=${!stars_char[*]}
-  [[ $replacement != 160 && ${stars_seen[$replacement]+present} && ${stars_band_member[replacement]} == 1 ]]
+  [[ $replacement != 160 && ${stars_seen[$replacement]+present} && ! ${stars_band_member[replacement]+present} ]]
   before=${stars_seen[$replacement]}
   ez_stars_tick 5600
-  [[ ${stars_seen[$replacement]} != "$before" ]]
+  [[ ${stars_seen[$replacement]} != "$before" && ${stars_band_member[replacement]} == 1 ]]
   # A twinkle on empty space owes no star; consuming the replacement preserves
   # population again, and must never restore it at the same coordinate.
   ez_stars_spawn 160 6000
@@ -528,7 +528,7 @@ printf 'PASS half baseline quantity with unchanged horizon weights and twinkle r
   indexed=()
   for members in "${stars_star_band[@]}"; do
     for cell in $members; do
-      [[ ${stars_char[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${indexed[cell]+present} ]]
+      [[ ${stars_char[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${stars_replacement_birth[cell]+present} && ! ${indexed[cell]+present} ]]
       indexed[cell]=1
     done
   done
@@ -637,6 +637,7 @@ printf 'PASS initial/replacement option-space exclusions, unchanged twinkles, an
   [[ -z $stars_output ]]
   # The global sweep still whitens/bolds a fading star, scaled by its intensity.
   stars_replacement_birth[160]=4000
+  ez_stars_build_work
   ez_stars_tick 4060
   IFS=';:' read -r red green blue style actual_glyph <<< "${stars_seen[160]}"
   [[ $red == "$green" && $green == "$blue" && $style == 1 && $actual_glyph == "$glyph" ]]
@@ -647,6 +648,7 @@ printf 'PASS initial/replacement option-space exclusions, unchanged twinkles, an
   # Fades hidden by text also finish; revealing one paints the settled star.
   stars_birth=() stars_replenish=() stars_replacement_birth=([160]=6000)
   stars_occluded=([160]=1)
+  ez_stars_build_work
   ez_stars_tick 6500
   [[ ! ${stars_replacement_birth[160]+present} ]]
   stars_occluded=() stars_work_dirty=1
@@ -718,3 +720,16 @@ printf 'PASS sparse repairs preserve UTF-8, strike gaps, empty/overlapping spans
   done
 )
 printf 'PASS foreground repairs suppress redundant deltas while retaining exact final cells\n'
+
+(
+  COLUMNS=240 LINES=80 visible=48 hint_rows=('controls')
+  ez_stars_init
+  ez_stars_layout 10 5 53 2
+  stars_text_char=() stars_occluded=()
+  ez_stars_prefetch 5 "$((stars_period - 1))"
+  [[ $stars_prefetch_budget == 128 && $stars_prefetch_cursor == 128 ]]
+  ez_stars_prefetch 6 1500
+  (( stars_prefetch_budget >= 32 && stars_prefetch_budget <= 128 ))
+  [[ $stars_prefetch_cursor == "$stars_prefetch_budget" ]]
+)
+printf 'PASS bounded adaptive color preparation, including a nearly expired idle window\n'

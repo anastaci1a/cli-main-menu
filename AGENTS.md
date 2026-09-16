@@ -84,6 +84,12 @@
 - Remove consumed baseline entries from sweep buckets; do not accumulate stale
   cells or whitespace in long sessions. Packed color tags must handle hue-cycle
   wraparound and zero RGB. Check `BENCH_TIME_OFFSET_MS` and custom hue steps.
+- Baseline buckets contain only live, visible stars without active twinkle or
+  replacement fades. Register replacements when their fade finishes; transient
+  and dirty work uses negative cell IDs and the general state checks. Rebuild
+  work after manually injecting state in tests. Keep idle color preparation
+  bounded (32–128 cells), and preserve the hue sampler's random draw order.
+  Use `BENCH_WARMUP_MS` to verify performance after sustained animation.
 - Build sparse foreground indexes inside the frozen repair frame, never reuse
   them after animation mutates cells. Preserve arbitrary/overlapping spans,
   UTF-8 markers and strike resets. Cache every changed cell even when suppressing

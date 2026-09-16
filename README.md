@@ -298,6 +298,23 @@ accumulating during long sessions. Each star's two cached RGB colors and cyclic
 hue tag share one integer, replacing three cache entries. The cache also handles
 black colors, custom hue steps, long pauses, and hue-cycle wraparound.
 
+At the current 50% density and unchanged graphics, two paired runs of the latest
+passes measured:
+
+| Viewport / options | Mean sweep frame, before → after | 95th percentile, before → after |
+| --- | --- | --- |
+| 80×24 / 4 | 5.29 → 5.15 ms | 16.07 → 15.67 ms |
+| 160×40 / 16 | 12.39 → 11.79 ms | 41.27 → 39.19 ms |
+| 240×60 / 30 | 25.71 → 24.03 ms | 90.31 → 83.89 ms |
+
+Full repairs also send about 11% fewer bytes by omitting redundant style resets.
+Baseline work buckets contain only visible stars whose replacement fade has
+finished, allowing their hot path to skip repeated state checks. Color preparation
+adapts to field size in bounded batches of 32–128 cells, and settled status colors
+are reused. The Gaussian hue sampler retains the exact same twelve random draws
+while reducing shell dispatch overhead. Animation output is unchanged; repair
+output uses fewer escape codes to produce the same cells.
+
 Run a deterministic benchmark without opening the menu:
 
 ```bash
@@ -323,6 +340,8 @@ The further pass also checks irregular frame intervals with `BENCH_JITTER=1`.
 For a reference renderer that already supports work buckets, use
 `BENCH_REFERENCE_CACHE=1` to include its caches in a fair timing comparison.
 `BENCH_TIME_OFFSET_MS` and `BENCH_HUE_STEP` exercise later cycles and custom hues.
+`BENCH_WARMUP_MS=240000` simulates four minutes before measurement to check
+long-session behavior (use the same setting for both reference and new renderer).
 `tools/benchmark-foreground.bash` measures full menu repairs; its optional fourth
 and fifth arguments load reference `render.bash` and `stars.bash` files. It uses
 the same `BENCH_CAPTURE` format for comparing complete foreground frames.

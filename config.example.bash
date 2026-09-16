@@ -9,7 +9,7 @@ EZ_MENU_STAR_DENSITY_PERCENT=50 # baseline stars relative to the original field 
 EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom density vs top; 100 = flat, max 800
 EZ_MENU_SWEEP_INTERVAL_MS=4000
 EZ_MENU_SWEEP_DURATION_MS=1467 # longer edge easing, same peak speed as the old 1 s sweep
-EZ_MENU_SWEEP_HUE_STEP=74
+EZ_MENU_SWEEP_HUE_STEP=random # uniform 60–120° per sweep; a number gives a fixed step
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range, centered with a Gaussian-like distribution
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # title/markers opposite the star palette's center

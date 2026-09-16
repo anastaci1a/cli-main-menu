@@ -279,7 +279,7 @@ printf 'PASS responsive hint sweep and eased status-bar colors\n'
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1
 EZ_MENU_TWINKLE_ADVANCE_MS=invalid EZ_MENU_TWINKLE_RATE_PERCENT=0
 ez_stars_init
-[[ $stars_period == 4000 && $stars_duration == 1467 && $stars_step == 74 ]]
+[[ $stars_period == 4000 && $stars_duration == 1467 && $stars_step == random ]]
 [[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 250 && $stars_twinkle_delay == 200 ]]
 printf 'PASS invalid animation settings use safe defaults\n'
 
@@ -659,7 +659,7 @@ printf 'PASS 500 ms eased replacement color fade, final frame, shimmer, and hidd
 
 (
   COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
-  for hue_step in 0 1 74 359 360; do
+  for hue_step in 0 1 74 359 360 random; do
     EZ_MENU_SWEEP_HUE_STEP=$hue_step
     ez_stars_init
     ez_stars_layout 10 5 53 2
@@ -667,7 +667,7 @@ printf 'PASS 500 ms eased replacement color fade, final frame, shimmer, and hidd
     stars_birth=() stars_text_char=() stars_occluded=()
     stars_next=999999999 stars_horizon_next=999999999
     ez_stars_build_work
-    for cycle in 358 359 360 361 720; do
+    for cycle in 358 359 360 361 720 16383 16384 16385; do
       ez_stars_prefetch "$((cycle - 1))"
       for phase in 30 120 1600; do
         ez_stars_tick "$((cycle * stars_period + phase))"
@@ -685,6 +685,39 @@ printf 'PASS 500 ms eased replacement color fade, final frame, shimmer, and hidd
   [[ ${stars_seen[160]} == '0;0;0:0:*' ]]
 )
 printf 'PASS packed-color cache wraparound, custom hue steps, skipped cycles, and black RGB\n'
+
+(
+  EZ_MENU_SWEEP_HUE_STEP=random RANDOM=1967
+  ez_stars_init
+  declare -a counts=() history=(0)
+  previous=0
+  for ((cycle = 1; cycle <= 6100; cycle++)); do
+    ez_stars_rotation "$cycle"
+    rotation=${stars_rotation[cycle % 3]}
+    increment=$(((rotation - previous + 360) % 360))
+    (( increment >= 60 && increment <= 120 ))
+    counts[increment]=$(( ${counts[increment]:-0} + 1 ))
+    history[cycle]=$rotation previous=$rotation
+  done
+  [[ ${#counts[@]} == 61 && ${#stars_rotation[@]} == 3 ]]
+  for count in "${counts[@]}"; do (( count > 50 && count < 155 )); done
+  # Repeated reads, backwards seeks and prefetch lookahead must share one path.
+  for cycle in 6100 6099 10 9 11 5000 4999; do
+    ez_stars_rotation "$cycle"
+    [[ ${stars_rotation[cycle % 3]} == "${history[cycle]}" ]]
+  done
+  # Every palette receives the same cumulative rotation, not its own draw.
+  for palette in 0 3 4; do
+    stars_rgb_cache=()
+    ez_stars_color "$palette" 11 0 100 1000
+    actual="$stars_r;$stars_g;$stars_b"
+    stars_step=${history[11]} stars_rgb_cache=()
+    ez_stars_color "$palette" 1 0 100 1000
+    [[ "$stars_r;$stars_g;$stars_b" == "$actual" ]]
+    stars_step=random
+  done
+)
+printf 'PASS uniform 60–120 degree sweep increments, bounded history, replay, and shared palette rotation\n'
 
 (
   stars_cell_render=()

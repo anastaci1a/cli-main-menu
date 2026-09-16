@@ -93,8 +93,14 @@ at the default 2.5× rate. The rate setting scales opportunity frequency
 multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
-then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
-permanently. A smooth, sine-shaped probability ranges from 100% between sweeps
+then reverse over 780 ms and disappear. If a twinkle consumes a baseline star,
+that star disappears from its original position. Once the twinkle ends, a new
+baseline star spawns at a different empty cell using the original horizon weights.
+It eases in from black to its chosen color over 500 ms, retaining its glyph and
+saturation without a white flash. The usual shimmer can cross it during that fade.
+Twinkles on empty cells add no baseline stars. Replacements wait if no space is
+available, so the field keeps its baseline population over time.
+A smooth, sine-shaped probability ranges from 100% between sweeps
 to 20% at its trough. The entire curve leads the shimmer midpoint by 500 ms,
 so births lessen sooner and recover earlier. Births remain rarer during the
 sweep, while existing twinkles keep fading through it.
@@ -104,22 +110,30 @@ in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diago
 40% of the travel time, making the ease visible beyond the tiny corners. The middle
 keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
 for 240 ms. Stars quickly approach white, then slowly regain saturation with
-a 70° hue shift that persists after the band passes. The row brightness fade is
-applied even to white peaks, so the bottom stays dimmer.
+a 74° hue shift that persists after the band passes. Star shimmer peaks are pure
+white across the top 30% of the field. Over the remaining 70%, peaks fade toward
+black one row beyond the field; the bottom uses the step before black. Ordinary
+twinkle brightness and text accent fades remain independent.
 Stars and title characters briefly turn bold around their own near-white sweep
 peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
 the terminal has room. The row fade starts at 65% at the first option and approaches
 5% one row beyond the field. That darkest endpoint is excluded, leaving the last
-visible row at the preceding color step. Star density eases upward quadratically from the
-original 1-in-8 chance at the top to 6-in-8 at the bottom, creating a dense, dim
-horizon. Twinkle frequency follows that same density gradient: the original
+visible row at the preceding color step. Baseline density is half the original
+quantity: it eases upward quadratically from a 1-in-16 chance at the top to
+3-in-8 at the bottom, creating a dense, dim horizon. This multiplier does not
+reduce the twinkle rate. Twinkle frequency follows the horizon gradient: the original
 uniform opportunities remain, with extra opportunities weighted by each row's
 density above baseline. Uniform births take priority, so the horizon cannot
 crowd out the top when reaching the one-birth-per-frame limit. Both streams use
 the same 2.5× rate setting and smooth sweep envelope.
 
-Stars extend behind the option block and control hints, including their spaces.
+Baseline stars leave spaces inside option labels and the circle-to-label gap
+empty, including spaces in visible disabled notes. Initial generation and
+replacement use the same exclusions. If scrolling places these spaces over
+existing baseline stars, those stars relocate using the normal replacement fade.
+Twinkles retain their existing spawn rules. Stars still extend through control
+hint spaces and around the option block.
 Foreground letters and circle markers always win over stars. The background
 retains its state under text, so scrolling reveals existing stars rather than
 rerandomizing them. The title keeps its surrounding clear space.
@@ -130,7 +144,7 @@ so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
 The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-70° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
+74° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
 intact during the title's bold flash. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
 During each sweep the full-width status background eases from
@@ -148,9 +162,10 @@ EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
 EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–1000)
+EZ_MENU_STAR_DENSITY_PERCENT=50 # baseline quantity relative to the original (range 0–100)
 EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
 EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
-EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
+EZ_MENU_SWEEP_HUE_STEP=74       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
@@ -236,6 +251,66 @@ node tools/render-preview.cjs /tmp/satellite-frames.ansi media
 
 These rendering dependencies are only for the README preview; the menu needs
 none of them at runtime.
+
+### Renderer performance
+
+The animation still targets 20 FPS with the same cells, colors, timing, random
+draws, and effects. The renderer groups changed cells into ordered output runs,
+reuses cursor/style/color state, and visits only active twinkles and the moving
+shimmer band. Integer lookup tables preserve the original easing exactly.
+Upcoming hues are prepared in small idle-frame batches, and arrow movement
+updates the affected markers without rebuilding the field.
+The work index groups arrivals into 16 ms buckets while every cell retains its
+exact millisecond timing. Twinkle and replacement easing use exact lookup tables;
+batched integer calculations and combined terminal style/color commands reduce
+shell and terminal parsing overhead.
+
+Measured over two identical runs on x86_64 Linux / Bash 5.3.3, at the original
+100% baseline density before the separate change to a 50% default:
+
+| Viewport / options | Mean sweep frame, before → after | 95th percentile, before → after | Output per sweep frame |
+| --- | --- | --- | --- |
+| 80×24 / 4 | 49 → 9 ms | 57 → 28 ms | 3,917 → 2,419 bytes |
+| 160×40 / 16 | 157 → 26 ms | 179 → 92 ms | 11,876 → 6,997 bytes |
+
+These timings measure Bash computation and output generation; terminal painting
+and device speed vary. The larger stress case can still exceed the 50 ms frame
+budget at the busiest point. These optimization gains involved no reduction in
+visual effects or density; the later 50% baseline setting is a separate visual choice.
+
+With the 50% baseline, replenishment, and original full-height shimmer fade, a separate
+run (including replacement fade-ins) measured 7 ms mean / 20 ms p95 at 80×24
+and 16 ms mean / 51 ms p95 at 160×40.
+Those figures include the intentional density change and are not a measurement
+of optimization alone.
+
+A further optimization pass, preserving those same frames, reduced sweep times
+to about 5 ms mean / 16 ms p95 at 80×24 and 13 ms mean / 44 ms p95 at 160×40.
+
+Run a deterministic benchmark without opening the menu:
+
+```bash
+LC_ALL=C bash tools/benchmark.bash 80 24 4 > /tmp/menu-benchmark.csv
+node tools/benchmark-summary.cjs /tmp/menu-benchmark.csv
+```
+
+For renderer changes, save the original `stars.bash` before editing and compare
+actual terminal cells, including RGB, bold/strike, status colors, and repair frames:
+
+```bash
+git show HEAD:stars.bash > /tmp/stars-reference.bash
+# After editing:
+BENCH_CAPTURE=/tmp/menu-before.frames LC_ALL=C bash tools/benchmark.bash 80 24 4 /tmp/stars-reference.bash > /tmp/menu-before.csv
+BENCH_CAPTURE=/tmp/menu-after.frames LC_ALL=C bash tools/benchmark.bash 80 24 4 > /tmp/menu-after.csv
+node tools/compare-frames.cjs /tmp/menu-before.frames /tmp/menu-after.frames
+```
+
+Set `BENCH_SCENARIO=1` on both capture commands to include selection changes,
+scrolling, resizing, and a pause that skips multiple sweeps. Optimization was
+checked against 720 matching frames across normal, large, and changing layouts.
+The further pass also checks irregular frame intervals with `BENCH_JITTER=1`.
+For a reference renderer that already supports work buckets, use
+`BENCH_REFERENCE_CACHE=1` to include its caches in a fair timing comparison.
 
 ## Git
 

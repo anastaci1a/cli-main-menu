@@ -25,16 +25,26 @@
   disabled styling, and all-or-nothing disabled explanations.
 - Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
   geometry on resize; preserve foreground glyphs and downward fade even at peak white.
-- Twinkles permanently replace their base stars and fade out more slowly than
-  they brighten. Animation updates must not launch processes
+- Twinkles remove consumed base stars from their original cells and fade out
+  more slowly than they brighten. After expiry, replenish consumed baseline
+  stars at different empty cells using the original horizon weights; births on
+  empty cells owe no replacement. Keep replacement work bounded and defer when
+  space is unavailable. Register replacements with the sweep's arrival buckets.
+  Replacement stars ease from black to their chosen color over 500 ms without
+  their own white flash. Track active fades in the work list, paint their final
+  brightness before settling, and let the normal shimmer cross them.
+  Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
 - Spawn twinkles individually. Keep each star's randomized saturation stable.
 - Keep star hue offsets stable and bounded around one center, concentrated with
   a Gaussian-like distribution rather than independently cycling palette hues.
 - Extend the star field past hints when rows permit, and stretch the option-row
   brightness falloff to the field's last row. Stars extend through option/hint
-  spaces; foreground glyphs occlude them. Preserve stars beneath text across
-  scrolling, and never spawn a twinkle on a glyph. The footer fades into darkness.
+  hint spaces; foreground glyphs occlude them. Exclude baseline stars from
+  option-label spaces (including visible notes) and the circle-to-label gap in
+  initial generation and replacement. Relocate newly excluded stars on scroll.
+  Preserve other stars beneath text, and never spawn a twinkle on a glyph.
+  The footer fades into darkness.
 - Weight individual twinkle opportunities smoothly through the sweep. A sweep
   reduces their frequency but must never switch births off abruptly. Existing
   twinkles continue their fade and share the crossing white/hue treatment.
@@ -49,6 +59,11 @@
   denser lower rows never consume the top's baseline opportunities.
 - Sample the downward fade with an exclusive bottom endpoint: the last visible
   row uses the color step before the darkest endpoint, never that endpoint itself.
+- Default baseline quantity is 50% of the original, independent of the 2.5×
+  twinkle rate. Star shimmer peaks are pure white throughout the top 30%;
+  the remaining 70% approaches black with an exclusive bottom endpoint. Ordinary
+  twinkle brightness and text accent fades remain independent. Default hue
+  rotation is 74° per sweep.
 - Status backgrounds ease to the settled hint color during each sweep.
 - Bold stars and title cells briefly at their own near-white sweep peaks, then
   restore normal weight. Keep selected-option bolding and disabled styling intact.
@@ -56,6 +71,16 @@
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
   Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
+- Preserve exact rendered cells when optimizing: timing, random draws, hue,
+  saturation, fade, glyphs, bold/strike, and density must not change. Compare
+  captured frames against the previous renderer using the tools below.
+- Rebuild arrival buckets after geometry/text-mask changes. Selection-only
+  movement updates dirty markers. Long pauses must settle every affected cell;
+  idle ticks visit active twinkles, not the whole field. Bound color prefetch
+  work and cache size, and do not add animation processes or runtime dependencies.
+- Work buckets may group nearby arrival times, but cell color/timing calculations
+  must use exact arrivals. Verify irregular frame intervals with `BENCH_JITTER=1`.
+  Use `BENCH_REFERENCE_CACHE=1` when timing an already optimized reference.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Keep input echo disabled throughout the selector, including redraws between
   reads. Restore the caller's exact terminal settings before returning or exiting.
@@ -78,6 +103,10 @@
 - Stub tmux/Codex and create isolated temporary jobs for checks. Do not attach,
   resume, or terminate the user's real sessions/jobs while testing.
 - Check `git diff --check` and inspect the staged changes before committing.
+- For performance work, use `tools/benchmark.bash` and `tools/benchmark-summary.cjs`.
+  `BENCH_CAPTURE` records actual deltas and repair frames for
+  `tools/compare-frames.cjs`; `BENCH_SCENARIO=1` also exercises selection,
+  scrolling, resize, and skipped cycles. Node is only a development dependency.
 
 ## Commit identity
 

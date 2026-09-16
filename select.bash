@@ -24,6 +24,17 @@ function ez_menu_choose() (
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
   local stars_density_max
   local stars_horizon_delay stars_horizon_next
+  local stars_geometry_key
+  local -a stars_flash stars_arrival_cell stars_settled stars_text_settled
+  local -a stars_star_band stars_text_band stars_text_dirty
+  local stars_work_ready stars_work_dirty stars_last_elapsed stars_last_phase
+  local -a stars_cached_target stars_cached_prev stars_cached_next stars_prefetch_cells
+  local stars_prefetch_cycle stars_prefetch_cursor
+  local stars_density_percent stars_replace_head stars_replace_tail
+  local -a stars_peak stars_replenish stars_replace_queue stars_star_dirty stars_band_member
+  local -a stars_replacement_birth
+  local -a stars_twinkle_curve stars_twinkle_glyph stars_replacement_curve
+  local -a stars_baseline_blocked stars_clear_pending
   local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen
@@ -155,6 +166,9 @@ function ez_menu_choose() (
         (( available_rows < 1 )) && available_rows=1
         visible=$count
         (( visible > available_rows )) && visible=$available_rows
+        (( first > count - visible )) && first=$((count - visible))
+        (( selected < first )) && first=$selected
+        (( selected >= first + visible )) && first=$((selected - visible + 1))
         read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "$@")
         new_star_key="$COLUMNS:$LINES:$visible:$option_left:$option_right:${#fitted_rows[@]}:$cached_compact:$cached_margin"
         if [[ $new_star_key != "$star_cache_key" ]]; then
@@ -165,7 +179,7 @@ function ez_menu_choose() (
               actual_title_width=${#row}
               (( actual_title_width > COLUMNS )) && actual_title_width=$COLUMNS
             fi
-            ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin" "$count"
+            ez_stars_layout "${#fitted_rows[@]}" "$title_height" "$actual_title_width" "$star_margin" "$count" "$first" "$@"
           else
             # Keep clear gutter cells beside the option block and its selector.
             left_gutter=3 right_gutter=3
@@ -189,7 +203,12 @@ function ez_menu_choose() (
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected"
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
+          if [[ ${text_cache_key%:*} == "$new_star_key:$first" ]]; then
+            ez_stars_select "$first" "$selected" "${#fitted_rows[@]}"
+          else
+            ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
+            ez_stars_build_work
+          fi
           text_cache_key=$new_text_key
         fi
         status_line=$(ez_menu_status_text)

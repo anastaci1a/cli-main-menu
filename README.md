@@ -96,6 +96,8 @@ They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`
 then reverse over 780 ms and disappear. If a twinkle consumes a baseline star,
 that star disappears from its original position. Once the twinkle ends, a new
 baseline star spawns at a different empty cell using the original horizon weights.
+It eases in from black to its chosen color over 500 ms, retaining its glyph and
+saturation without a white flash. The usual shimmer can cross it during that fade.
 Twinkles on empty cells add no baseline stars. Replacements wait if no space is
 available, so the field keeps its baseline population over time.
 A smooth, sine-shaped probability ranges from 100% between sweeps
@@ -268,7 +270,8 @@ budget at the busiest point. These optimization gains involved no reduction in
 visual effects or density; the later 50% baseline setting is a separate visual choice.
 
 With the current 50% baseline, replenishment, and deeper shimmer fade, a separate
-run measured 7 ms mean / 20 ms p95 at 80×24 and 15 ms mean / 49 ms p95 at 160×40.
+run (including replacement fade-ins) measured 7 ms mean / 20 ms p95 at 80×24
+and 16 ms mean / 51 ms p95 at 160×40.
 Those figures include the intentional density change and are not a measurement
 of optimization alone.
 

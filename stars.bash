@@ -73,6 +73,7 @@ function ez_stars_init() {
   stars_work_ready=0 stars_work_dirty=1 stars_last_elapsed=-1 stars_last_phase=0
   stars_text_dirty=()
   stars_star_dirty=() stars_band_member=() stars_replenish=() stars_replace_queue=()
+  stars_replacement_birth=()
   stars_replace_head=0 stars_replace_tail=0
   stars_cached_target=() stars_cached_prev=() stars_cached_next=()
   stars_prefetch_cycle=-1 stars_prefetch_cursor=0 stars_prefetch_cells=()
@@ -152,6 +153,7 @@ function ez_stars_layout() {
   stars_birth=() stars_seen=() stars_fade=() stars_density=() stars_cell_render=() stars_text_seen=()
   stars_cached_target=() stars_cached_prev=() stars_cached_next=() stars_prefetch_cycle=-1
   stars_star_dirty=() stars_replenish=() stars_replace_queue=()
+  stars_replacement_birth=()
   stars_replace_head=0 stars_replace_tail=0 stars_peak=()
   # Leave the final terminal row free so repainting cannot scroll the screen.
   stars_top=3 stars_bottom=$((hint_end + 2))
@@ -420,6 +422,7 @@ function ez_stars_spawn() {
     stars_replenish[cell]=1
   fi
   stars_birth[$cell]=$elapsed
+  unset 'stars_replacement_birth[cell]'
   stars_char[$cell]='.'
   stars_palette[$cell]=$((RANDOM % 3))
   ez_stars_pick_saturation "$cell"
@@ -432,6 +435,13 @@ function ez_stars_spawn() {
 # Pending replacements use a bounded queue and retry if no other empty spot exists.
 function ez_stars_retire() {
   local elapsed=$1 cell
+  # Complete even hidden fades. Dirty the final frame so idle/settled shortcuts
+  # cannot leave a star just below its full brightness after the timer expires.
+  for cell in "${!stars_replacement_birth[@]}"; do
+    (( elapsed - stars_replacement_birth[cell] >= 500 )) || continue
+    unset 'stars_replacement_birth[cell]' 'stars_seen[$cell]' 'stars_settled[cell]'
+    stars_star_dirty[cell]=1
+  done
   for cell in "${!stars_birth[@]}"; do
     (( elapsed - stars_birth[$cell] >= 900 )) || continue
     if [[ ${stars_replenish[cell]:-0} == 1 ]]; then
@@ -448,6 +458,7 @@ function ez_stars_retire() {
 }
 
 function ez_stars_replace() {
+  local elapsed=${1:-0}
   local cell row col origin attempt arrival distance bottom=${stars_sweep_bottom:-$stars_bottom}
   local count=${#stars_cells[@]} chars='*.+ '
   (( count && stars_replace_head < stars_replace_tail )) || return 0
@@ -464,6 +475,7 @@ function ez_stars_replace() {
     ez_stars_pick_hue "$cell"
     unset 'stars_seen[$cell]' 'stars_settled[cell]' 'stars_cached_target[cell]'
     stars_star_dirty[cell]=1
+    stars_replacement_birth[cell]=$elapsed
     if [[ ${stars_band_member[cell]:-0} != 1 ]] && (( stars_work_ready )); then
       distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
       arrival=${stars_sweep_arrival[distance]} stars_arrival_cell[cell]=$arrival
@@ -585,7 +597,7 @@ function ez_stars_tick() {
     stars_rgb_cache=() stars_cache_cycle=$cycle
   fi
   ez_stars_retire "$elapsed"
-  ez_stars_replace
+  ez_stars_replace "$elapsed"
   # Faster random opportunities keep the same smooth probability envelope.
   if (( elapsed >= stars_next )); then
     ez_stars_twinkle_weight "$elapsed"
@@ -604,7 +616,7 @@ function ez_stars_tick() {
   fi
   if (( stars_work_ready && ! stars_work_dirty && elapsed >= stars_last_elapsed )) &&
      (( cycle == stars_render_cycle || (cycle == stars_render_cycle + 1 && ! stars_was_sweeping && sweeping) )); then
-    work_stars=("${!stars_birth[@]}" "${!stars_star_dirty[@]}") work_text=("${!stars_text_dirty[@]}")
+    work_stars=("${!stars_birth[@]}" "${!stars_replacement_birth[@]}" "${!stars_star_dirty[@]}") work_text=("${!stars_text_dirty[@]}")
     if (( sweeping || stars_was_sweeping )); then
       lower=0 upper=$phase
       (( cycle == stars_render_cycle && stars_was_sweeping )) && lower=$((stars_last_phase - stars_rise - stars_tail + 1))
@@ -625,7 +637,7 @@ function ez_stars_tick() {
     # underlying star's state so scrolling can reveal it without rerandomizing.
     [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} ]] && continue
     # Between effects, unchanged stars cost no color conversion or terminal I/O.
-    if (( stable )) && [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} ]]; then continue; fi
+    if (( stable )) && [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${stars_replacement_birth[cell]+present} ]]; then continue; fi
     row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
     arrival=${stars_arrival_cell[cell]-}
     if [[ -z $arrival ]]; then
@@ -634,7 +646,7 @@ function ez_stars_tick() {
     fi
     local_phase=$((phase - arrival)) expected=$cycle
     (( sweeping && local_phase < 0 )) && expected=$((cycle - 1))
-    if [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} ]] &&
+    if [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${stars_replacement_birth[cell]+present} ]] &&
        (( ! sweeping || local_phase < 0 || local_phase >= stars_rise + stars_tail )); then
       [[ ${stars_settled[cell]:--1} == "$expected" ]] && continue
     fi
@@ -650,6 +662,13 @@ function ez_stars_tick() {
       if (( intensity < 250 )); then char='.';
       elif (( intensity < 650 )); then char='+';
       else char='*'; fi
+    elif [[ ${stars_replacement_birth[cell]+present} ]]; then
+      age=$((elapsed - stars_replacement_birth[cell]))
+      (( age < 0 )) && age=0
+      ez_stars_ease "$((age * 1000 / 500))"
+      # Fade only intensity: preserve the chosen glyph, hue and saturation.
+      # A crossing shimmer can still apply its usual color/bold treatment.
+      intensity=$stars_eased
     fi
     if (( sweeping )); then
       stars_white=0 color_cycle=$expected

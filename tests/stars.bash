@@ -549,3 +549,55 @@ printf 'PASS population replacement at weighted empty cells, future sweeps, and 
   (( stars_peak[stars_bottom] == 1000 / (stars_bottom - stars_top + 1) ))
 )
 printf 'PASS full-height shimmer peak fade with an exclusive black endpoint\n'
+
+(
+  COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
+  ez_stars_init
+  ez_stars_layout 10 5 53 2
+  stars_cells=(160) stars_char=() stars_birth=() stars_text_char=() stars_occluded=()
+  stars_next=999999 stars_horizon_next=999999
+  stars_replace_queue=([0]=161) stars_replace_head=0 stars_replace_tail=1
+  ez_stars_build_work
+  RANDOM=419
+  ez_stars_replace 1000
+  [[ ${stars_replacement_birth[160]} == 1000 && ! ${stars_birth[160]+present} ]]
+  glyph=${stars_char[160]}
+  ez_stars_color "${stars_palette[160]}" 0 0 100 1000 "${stars_saturation[160]}" "${stars_hue_offset[160]}"
+  full_red=$stars_r full_green=$stars_g full_blue=$stars_b
+  (( full_red != full_green || full_green != full_blue ))
+  previous=-1
+  for age in 0 100 250 400 499 500; do
+    ez_stars_tick "$((1000 + age))"
+    IFS=';:' read -r red green blue style actual_glyph <<< "${stars_seen[160]}"
+    [[ $actual_glyph == "$glyph" && $style == 0 ]]
+    (( red >= previous && red <= full_red && green <= full_green && blue <= full_blue ))
+    previous=$red
+    case $age in
+      0) [[ $red == 0 && $green == 0 && $blue == 0 ]] ;;
+      100) (( red * 5 < full_red )) ;;
+      250) (( full_red - red * 2 <= 1 && full_green - green * 2 <= 1 && full_blue - blue * 2 <= 1 )) ;;
+      400) (( red * 5 > full_red * 4 )) ;;
+      500) [[ $red == "$full_red" && $green == "$full_green" && $blue == "$full_blue" && ! ${stars_replacement_birth[160]+present} ]] ;;
+    esac
+  done
+  ez_stars_tick 1600
+  [[ -z $stars_output ]]
+  # The global sweep still whitens/bolds a fading star, scaled by its intensity.
+  stars_replacement_birth[160]=4000
+  ez_stars_tick 4060
+  IFS=';:' read -r red green blue style actual_glyph <<< "${stars_seen[160]}"
+  [[ $red == "$green" && $green == "$blue" && $style == 1 && $actual_glyph == "$glyph" ]]
+  (( red > 0 && red < 255 ))
+  # Consuming a still-fading replacement transfers its one baseline-star debt.
+  ez_stars_spawn 160 4100
+  [[ ! ${stars_replacement_birth[160]+present} && ${stars_replenish[160]} == 1 ]]
+  # Fades hidden by text also finish; revealing one paints the settled star.
+  stars_birth=() stars_replenish=() stars_replacement_birth=([160]=6000)
+  stars_occluded=([160]=1)
+  ez_stars_tick 6500
+  [[ ! ${stars_replacement_birth[160]+present} ]]
+  stars_occluded=() stars_work_dirty=1
+  ez_stars_tick 6550
+  [[ ${stars_seen[160]+present} && -n $stars_output ]]
+)
+printf 'PASS 500 ms eased replacement color fade, final frame, shimmer, and hidden/collision cleanup\n'

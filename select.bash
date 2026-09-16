@@ -32,6 +32,7 @@ function ez_menu_choose() (
   local stars_prefetch_cycle stars_prefetch_cursor
   local stars_density_percent stars_replace_head stars_replace_tail
   local -a stars_peak stars_replenish stars_replace_queue stars_star_dirty stars_band_member
+  local -a stars_replacement_birth
   local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen

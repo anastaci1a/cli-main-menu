@@ -30,6 +30,9 @@
   stars at different empty cells using the original horizon weights; births on
   empty cells owe no replacement. Keep replacement work bounded and defer when
   space is unavailable. Register replacements with the sweep's arrival buckets.
+  Replacement stars ease from black to their chosen color over 500 ms without
+  their own white flash. Track active fades in the work list, paint their final
+  brightness before settling, and let the normal shimmer cross them.
   Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
 - Spawn twinkles individually. Keep each star's randomized saturation stable.

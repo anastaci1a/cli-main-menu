@@ -116,6 +116,7 @@ stars_seen=()
 ez_stars_tick 1100
 [[ -z $stars_output ]]
 printf 'PASS fast eased twinkle, slow fade, and permanent collision removal\n'
+stars_replenish=() stars_replace_queue=() stars_replace_head=0 stars_replace_tail=0
 
 # The probability envelope is periodic, smooth and nonzero through the sweep.
 ez_stars_twinkle_weight 3500
@@ -376,7 +377,7 @@ for cell in "${!stars_char[@]}"; do
   if (( row == stars_top )); then top_count=$((top_count + 1)); fi
   if (( row == stars_bottom )); then bottom_count=$((bottom_count + 1)); fi
 done
-(( top_count > 60 && top_count < 150 && bottom_count > 520 && bottom_count < 680 ))
+(( top_count > 25 && top_count < 80 && bottom_count > 250 && bottom_count < 360 ))
 (( bottom_count > top_count * 4 ))
 for ((row = stars_top + 1; row <= stars_bottom; row++)); do
   (( stars_density[row] >= stars_density[row-1] ))
@@ -441,3 +442,110 @@ stars_next=0 stars_horizon_next=0
 ez_stars_tick 2000
 [[ ${#stars_birth[@]} == 0 ]]
 printf 'PASS transparent text spaces, foreground occlusion, and preserved underlying stars\n'
+
+# The baseline multiplier changes quantity, not the horizon weights or twinkle
+# clock. A large sample distinguishes half the former population from 50% fill.
+(
+  COLUMNS=800 LINES=30 visible=4 hint_rows=('controls')
+  EZ_MENU_HORIZON_DENSITY_PERCENT=600
+  for percent in 100 50 0; do
+    EZ_MENU_STAR_DENSITY_PERCENT=$percent
+    ez_stars_init
+    RANDOM=2941
+    ez_stars_layout 10 5 53 2
+    case $percent in
+      100) original_count=${#stars_char[@]} ;;
+      50) half_count=${#stars_char[@]} ;;
+      0) [[ ${#stars_char[@]} == 0 ]] ;;
+    esac
+    [[ ${stars_density[$stars_top]} == 1000 && ${stars_density[$stars_bottom]} == 6000 ]]
+    [[ $stars_twinkle_rate == 250 ]]
+  done
+  (( half_count * 100 > original_count * 45 && half_count * 100 < original_count * 55 ))
+)
+printf 'PASS half baseline quantity with unchanged horizon weights and twinkle rate\n'
+
+(
+  EZ_MENU_STAR_DENSITY_PERCENT=50 EZ_MENU_HORIZON_DENSITY_PERCENT=600
+  COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
+  ez_stars_init
+  ez_stars_layout 10 5 53 2
+  stars_text_char=() stars_occluded=() stars_char=([160]='*')
+  stars_palette=([160]=0) stars_seen=() stars_birth=()
+  stars_next=999999 stars_horizon_next=999999
+  ez_stars_build_work
+  ez_stars_spawn 160 100
+  ez_stars_tick 999
+  [[ ${stars_replenish[160]} == 1 && ${stars_birth[160]} == 100 ]]
+  ez_stars_tick 1000
+  [[ ! ${stars_char[160]+present} && ${#stars_char[@]} == 1 && ${#stars_birth[@]} == 0 ]]
+  replacement=${!stars_char[*]}
+  [[ $replacement != 160 && ${stars_seen[$replacement]+present} && ${stars_band_member[replacement]} == 1 ]]
+  before=${stars_seen[$replacement]}
+  ez_stars_tick 5600
+  [[ ${stars_seen[$replacement]} != "$before" ]]
+  # A twinkle on empty space owes no star; consuming the replacement preserves
+  # population again, and must never restore it at the same coordinate.
+  ez_stars_spawn 160 6000
+  ez_stars_tick 6900
+  [[ ${#stars_char[@]} == 1 && ${stars_char[$replacement]+present} ]]
+  ez_stars_spawn "$replacement" 7000
+  ez_stars_tick 7900
+  [[ ${#stars_char[@]} == 1 && ! ${stars_char[$replacement]+present} ]]
+  # Rejection sampling uses the original row weights for replacement locations.
+  stars_cells=(160 "$(((stars_bottom - 1) * COLUMNS))")
+  upper=0 lower=0 RANDOM=9017
+  for ((trial = 0; trial < 1000; trial++)); do
+    stars_char=() stars_birth=() stars_replace_head=0 stars_replace_tail=1
+    stars_replace_queue=([0]=999999)
+    ez_stars_replace
+    for cell in "${!stars_char[@]}"; do
+      if (( cell == 160 )); then upper=$((upper + 1)); else lower=$((lower + 1)); fi
+    done
+  done
+  (( lower > upper * 4 && lower < upper * 8 ))
+  # A full/one-cell field defers its debt instead of reviving the consumed star.
+  stars_cells=(160) stars_char=() stars_birth=()
+  stars_replace_head=0 stars_replace_tail=1 stars_replace_queue=([0]=160)
+  ez_stars_replace
+  [[ ${#stars_char[@]} == 0 && $stars_replace_tail == 1 ]]
+
+  # Across many overlapping births and complete sweeps, every initial baseline
+  # star is either present, temporarily consumed, or queued for replenishment.
+  ez_stars_init
+  ez_stars_layout 10 5 53 2
+  stars_text_char=() stars_occluded=()
+  initial_population=${#stars_char[@]}
+  ez_stars_build_work
+  for ((instant = 0; instant < 20000; instant += 50)); do
+    ez_stars_tick "$instant"
+    population=$((${#stars_char[@]} - ${#stars_birth[@]} + ${#stars_replenish[@]} + stars_replace_tail - stars_replace_head))
+    (( population == initial_population ))
+  done
+)
+printf 'PASS population replacement at weighted empty cells, future sweeps, and full-field deferral\n'
+
+(
+  COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
+  ez_stars_init
+  ez_stars_layout 10 5 53 2
+  stars_text_char=() stars_occluded=() stars_birth=()
+  stars_next=999999 stars_horizon_next=999999
+  previous=256
+  for ((row = stars_top; row <= stars_bottom; row++)); do
+    cell=$(((row - 1) * COLUMNS))
+    stars_char=([$cell]='*') stars_palette=([$cell]=0) stars_seen=()
+    distance=$(((row - stars_top) * 1000 / (stars_sweep_bottom - stars_top) / 2))
+    instant=$((4000 + stars_sweep_arrival[distance] + stars_rise))
+    ez_stars_tick "$instant"
+    peak=${stars_peak[row]}
+    (( peak > stars_fade[row] * 10 )) && peak=$((stars_fade[row] * 10))
+    level=$((255 * peak / 1000))
+    [[ ${stars_seen[$cell]} == "$level;$level;$level:1:*" ]]
+    (( level > 0 && level <= previous ))
+    previous=$level
+  done
+  [[ ${stars_peak[$stars_top]} == 1000 ]]
+  (( stars_peak[stars_bottom] == 1000 / (stars_bottom - stars_top + 1) ))
+)
+printf 'PASS full-height shimmer peak fade with an exclusive black endpoint\n'

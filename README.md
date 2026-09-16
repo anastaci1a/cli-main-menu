@@ -93,8 +93,12 @@ at the default 2.5× rate. The rate setting scales opportunity frequency
 multiplicatively, preserving the probability curve instead of clipping its peaks.
 Their fades may overlap, but a frame never spawns a group or catches up missed births.
 They ease from dark to bright white over 120 ms, changing from `.` to `+` to `*`,
-then reverse over 780 ms and disappear. A twinkle replaces any star beneath it
-permanently. A smooth, sine-shaped probability ranges from 100% between sweeps
+then reverse over 780 ms and disappear. If a twinkle consumes a baseline star,
+that star disappears from its original position. Once the twinkle ends, a new
+baseline star spawns at a different empty cell using the original horizon weights.
+Twinkles on empty cells add no baseline stars. Replacements wait if no space is
+available, so the field keeps its baseline population over time.
+A smooth, sine-shaped probability ranges from 100% between sweeps
 to 20% at its trough. The entire curve leads the shimmer midpoint by 500 ms,
 so births lessen sooner and recover earlier. Births remain rarer during the
 sweep, while existing twinkles keep fading through it.
@@ -104,16 +108,19 @@ in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diago
 40% of the travel time, making the ease visible beyond the tiny corners. The middle
 keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
 for 240 ms. Stars quickly approach white, then slowly regain saturation with
-a 70° hue shift that persists after the band passes. The row brightness fade is
-applied even to white peaks, so the bottom stays dimmer.
+a 70° hue shift that persists after the band passes. Star white peaks also fade
+from full brightness at the top toward black one row beyond the field, capped
+by the existing row brightness. The bottom uses the step before black. This
+deeper shimmer fade leaves ordinary twinkle brightness and text accents intact.
 Stars and title characters briefly turn bold around their own near-white sweep
 peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
 the terminal has room. The row fade starts at 65% at the first option and approaches
 5% one row beyond the field. That darkest endpoint is excluded, leaving the last
-visible row at the preceding color step. Star density eases upward quadratically from the
-original 1-in-8 chance at the top to 6-in-8 at the bottom, creating a dense, dim
-horizon. Twinkle frequency follows that same density gradient: the original
+visible row at the preceding color step. Baseline density is half the original
+quantity: it eases upward quadratically from a 1-in-16 chance at the top to
+3-in-8 at the bottom, creating a dense, dim horizon. This multiplier does not
+reduce the twinkle rate. Twinkle frequency follows the horizon gradient: the original
 uniform opportunities remain, with extra opportunities weighted by each row's
 density above baseline. Uniform births take priority, so the horizon cannot
 crowd out the top when reaching the one-birth-per-frame limit. Both streams use
@@ -148,6 +155,7 @@ EZ_MENU_ANIMATE_STARS=1          # 0 restores stationary stars
 EZ_MENU_SWEEP_INTERVAL_MS=4000  # time between sweep starts
 EZ_MENU_TWINKLE_ADVANCE_MS=500  # lead relative to the sweep midpoint; 0 restores original timing
 EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–1000)
+EZ_MENU_STAR_DENSITY_PERCENT=50 # baseline quantity relative to the original (range 0–100)
 EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
 EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
 EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
@@ -246,7 +254,8 @@ shimmer band. Integer lookup tables preserve the original easing exactly.
 Upcoming hues are prepared in small idle-frame batches, and arrow movement
 updates the affected markers without rebuilding the field.
 
-Measured over two identical runs on x86_64 Linux / Bash 5.3.3:
+Measured over two identical runs on x86_64 Linux / Bash 5.3.3, at the original
+100% baseline density before the separate change to a 50% default:
 
 | Viewport / options | Mean sweep frame, before → after | 95th percentile, before → after | Output per sweep frame |
 | --- | --- | --- | --- |
@@ -255,7 +264,13 @@ Measured over two identical runs on x86_64 Linux / Bash 5.3.3:
 
 These timings measure Bash computation and output generation; terminal painting
 and device speed vary. The larger stress case can still exceed the 50 ms frame
-budget at the busiest point. No visual effects or density were reduced.
+budget at the busiest point. These optimization gains involved no reduction in
+visual effects or density; the later 50% baseline setting is a separate visual choice.
+
+With the current 50% baseline, replenishment, and deeper shimmer fade, a separate
+run measured 7 ms mean / 20 ms p95 at 80×24 and 15 ms mean / 49 ms p95 at 160×40.
+Those figures include the intentional density change and are not a measurement
+of optimization alone.
 
 Run a deterministic benchmark without opening the menu:
 

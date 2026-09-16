@@ -25,8 +25,12 @@
   disabled styling, and all-or-nothing disabled explanations.
 - Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
   geometry on resize; preserve foreground glyphs and downward fade even at peak white.
-- Twinkles permanently replace their base stars and fade out more slowly than
-  they brighten. Animation updates must not launch processes
+- Twinkles remove consumed base stars from their original cells and fade out
+  more slowly than they brighten. After expiry, replenish consumed baseline
+  stars at different empty cells using the original horizon weights; births on
+  empty cells owe no replacement. Keep replacement work bounded and defer when
+  space is unavailable. Register replacements with the sweep's arrival buckets.
+  Animation updates must not launch processes
   per star/frame, alter job control, or leave a background worker after exit.
 - Spawn twinkles individually. Keep each star's randomized saturation stable.
 - Keep star hue offsets stable and bounded around one center, concentrated with
@@ -49,6 +53,10 @@
   denser lower rows never consume the top's baseline opportunities.
 - Sample the downward fade with an exclusive bottom endpoint: the last visible
   row uses the color step before the darkest endpoint, never that endpoint itself.
+- Default baseline quantity is 50% of the original, independent of the 2.5×
+  twinkle rate. Star shimmer white peaks approach black across the full field
+  height, with an exclusive bottom endpoint and no increase over the existing
+  row peak. Ordinary twinkle brightness and text accent fades remain independent.
 - Status backgrounds ease to the settled hint color during each sweep.
 - Bold stars and title cells briefly at their own near-white sweep peaks, then
   restore normal weight. Keep selected-option bolding and disabled styling intact.

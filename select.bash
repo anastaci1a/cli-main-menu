@@ -26,6 +26,8 @@ function ez_menu_choose() (
   local stars_sat_max stars_accent_offset stars_white stars_color_cycle stars_hue_spread stars_sweep_bottom stars_bar_bg
   local stars_top stars_bottom stars_eased stars_r stars_g stars_b stars_output
   local stars_rgb_value
+  local stars_rotation_seed stars_rotation_state stars_rotation_cycle stars_rotation_value stars_pair_epoch
+  local -a stars_rotation
   local stars_bar_cycle stars_bar_from stars_bar_to stars_bar_target_bg
   local stars_spawn_weight stars_twinkle_advance stars_twinkle_rate stars_twinkle_delay
   local stars_density_max

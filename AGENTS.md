@@ -63,7 +63,9 @@
   twinkle rate. Star shimmer peaks are pure white throughout the top 30%;
   the remaining 70% approaches black with an exclusive bottom endpoint. Ordinary
   twinkle brightness and text accent fades remain independent. Default hue
-  rotation is 74° per sweep.
+  rotation is a uniformly random inclusive 60–120° increment per sweep. Share
+  each cumulative rotation across all palettes and prefetch; redraws must not
+  reroll it. Preserve fixed numeric step overrides and bound rotation history.
 - Status backgrounds ease to the settled hint color during each sweep.
 - Bold stars and title cells briefly at their own near-white sweep peaks, then
   restore normal weight. Keep selected-option bolding and disabled styling intact.

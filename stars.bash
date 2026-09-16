@@ -22,7 +22,7 @@ function ez_stars_init() {
   local -a levels=(0 95 135 175 215 255)
   stars_period=${EZ_MENU_SWEEP_INTERVAL_MS:-4000}
   stars_duration=${EZ_MENU_SWEEP_DURATION_MS:-1467}
-  stars_step=${EZ_MENU_SWEEP_HUE_STEP:-74}
+  stars_step=${EZ_MENU_SWEEP_HUE_STEP:-random}
   stars_sat_max=${EZ_MENU_STAR_SATURATION_MAX:-800}
   stars_accent_offset=${EZ_MENU_SWEEP_ACCENT_OFFSET:-180}
   stars_hue_spread=${EZ_MENU_STAR_HUE_SPREAD:-60}
@@ -49,8 +49,12 @@ function ez_stars_init() {
   (( stars_hue_spread > 360 )) && stars_hue_spread=360
   [[ $stars_period =~ ^[1-9][0-9]{0,5}$ ]] || stars_period=4000
   [[ $stars_duration =~ ^[1-9][0-9]{0,4}$ ]] || stars_duration=1467
-  [[ $stars_step =~ ^[0-9]{1,3}$ ]] || stars_step=74
-  stars_step=$((10#$stars_step))
+  [[ $stars_step =~ ^[0-9]{1,3}$ ]] || stars_step=random
+  if [[ $stars_step != random ]]; then stars_step=$((10#$stars_step)); fi
+  stars_rotation=(0) stars_rotation_cycle=0 stars_rotation_value=0 stars_pair_epoch=-1
+  stars_rotation_seed=0
+  if [[ $stars_step == random ]]; then stars_rotation_seed=$((RANDOM * 32768 + RANDOM)); fi
+  stars_rotation_state=$stars_rotation_seed
   [[ $stars_sat_max =~ ^[0-9]{1,4}$ ]] || stars_sat_max=800
   stars_sat_max=$((10#$stars_sat_max))
   (( stars_sat_max > 1000 )) && stars_sat_max=1000
@@ -449,12 +453,38 @@ function ez_stars_sweep_ease() {
   return 0
 }
 
+# One independent random stream chooses shared sweep increments. Keep only the
+# previous/current/next rotations; replay the seed if a caller seeks backwards.
+# Rejection sampling avoids modulo bias among the 61 inclusive degree choices.
+function ez_stars_rotation() {
+  local target=$1
+  if (( target < stars_rotation_cycle - 2 )); then
+    stars_rotation=(0) stars_rotation_cycle=0 stars_rotation_value=0
+    stars_rotation_state=$stars_rotation_seed
+  fi
+  while (( stars_rotation_cycle < target )); do
+    while :; do
+      stars_rotation_state=$(((1664525 * stars_rotation_state + 1013904223) & 4294967295))
+      (( stars_rotation_state < 4294967239 )) && break
+    done
+    (( stars_rotation_value = (stars_rotation_value + 60 + stars_rotation_state % 61) % 360,
+       stars_rotation_cycle += 1,
+       stars_rotation[stars_rotation_cycle % 3] = stars_rotation_value, 1 ))
+  done
+}
+
 function ez_stars_palette_rgb() {
   local palette=$1 cycle=$2
   local saturation=${3:-${stars_sat[palette]}} offset=${4:-0}
-  local key="$palette:$cycle:$saturation:$offset" hue chroma secondary minimum value red green blue
+  local key="$palette:$cycle:$saturation:$offset" hue chroma secondary minimum value red green blue rotation
   if [[ ! ${stars_rgb_cache[$key]+present} ]]; then
-    (( hue = (stars_hue[palette] + cycle * stars_step + offset + 360) % 360,
+    if [[ $stars_step == random ]]; then
+      if (( cycle > stars_rotation_cycle || cycle < stars_rotation_cycle - 2 )); then
+        ez_stars_rotation "$cycle"
+      fi
+      rotation=${stars_rotation[cycle % 3]}
+    else rotation=$((cycle * stars_step)); fi
+    (( hue = (stars_hue[palette] + rotation + offset + 360) % 360,
        value = stars_value[palette], chroma = value * saturation / 1000,
        secondary = hue % 120 - 60, secondary = secondary < 0 ? -secondary : secondary,
        secondary = chroma * (60 - secondary) / 60, minimum = value - chroma, 1 ))
@@ -579,7 +609,10 @@ function ez_stars_index_baseline() {
 # cell; sweeping never pays the full HSV-conversion bill at its busiest point.
 function ez_stars_prefetch() {
   local cycle=$1 cell palette saturation offset target value pair previous count=0
-  local current_tag=$((cycle % 360 + 1)) next_tag=$(((cycle + 1) % 360 + 1))
+  local current_tag=$((cycle % 16384 + 1)) next_tag=$(((cycle + 1) % 16384 + 1))
+  if (( stars_pair_epoch != cycle / 16384 )); then
+    stars_color_pair=() stars_pair_epoch=$((cycle / 16384))
+  fi
   local remaining_frames
   target=$((cycle + 1))
   if (( stars_prefetch_cycle != cycle )); then
@@ -609,8 +642,8 @@ function ez_stars_prefetch() {
     previous=$value
     ez_stars_palette_rgb "$palette" "$target" "$saturation" "$offset"
     value=$stars_rgb_value
-    # RGB pairs plus a hue-cycle tag fit in 57 bits. Integer hue steps always
-    # repeat after 360 cycles; tag 0 marks an absent cache, even for black RGB.
+    # Two RGB colors and a cycle tag fit in 63 bits. Clear all pairs on tag
+    # epoch changes: random rotations do not repeat after 360 cycles.
     stars_color_pair[cell]=$(((next_tag << 48) | (value << 24) | previous))
   done
   return 0
@@ -692,6 +725,9 @@ function ez_stars_tick() {
   fi
   stars_output=''
   cycle=$((elapsed / stars_period)) phase=$((elapsed % stars_period))
+  if (( stars_pair_epoch != cycle / 16384 )); then
+    stars_color_pair=() stars_pair_epoch=$((cycle / 16384))
+  fi
   (( cycle > 0 && phase < stars_duration )) && sweeping=1
   if (( ! sweeping && ! stars_was_sweeping && cycle == stars_render_cycle )); then stable=1; fi
   if (( cycle != stars_cache_cycle )); then
@@ -784,7 +820,7 @@ function ez_stars_tick() {
        white = 1000 - (1000 - white) * (1000 - stars_white) / 1000,
        stars_settled[cell] = active_flash ? -1 : expected, 1 ))
     pair=${stars_color_pair[cell]:-0}
-    (( tag = color_cycle % 360 + 1, next_tag = (color_cycle + 1) % 360 + 1, 1 ))
+    (( tag = color_cycle % 16384 + 1, next_tag = (color_cycle + 1) % 16384 + 1, 1 ))
     if (( pair >> 48 == tag )); then
       value=$(((pair >> 24) & 16777215))
     elif (( pair >> 48 == next_tag )); then

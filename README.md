@@ -110,7 +110,7 @@ in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diago
 40% of the travel time, making the ease visible beyond the tiny corners. The middle
 keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
 for 240 ms. Stars quickly approach white, then slowly regain saturation with
-a 74° hue shift that persists after the band passes. Star shimmer peaks are pure
+a uniformly random 60–120° hue shift that persists after the band passes. Star shimmer peaks are pure
 white across the top 30% of the field. Over the remaining 70%, peaks fade toward
 black one row beyond the field; the bottom uses the step before black. Ordinary
 twinkle brightness and text accent fades remain independent.
@@ -144,7 +144,7 @@ so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
 The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-74° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
+random increment per sweep. Selected-option bolding and disabled-marker strike/dimming remain
 intact during the title's bold flash. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
 During each sweep the full-width status background eases from
@@ -165,7 +165,7 @@ EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–10
 EZ_MENU_STAR_DENSITY_PERCENT=50 # baseline quantity relative to the original (range 0–100)
 EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
 EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
-EZ_MENU_SWEEP_HUE_STEP=74       # degrees added per sweep
+EZ_MENU_SWEEP_HUE_STEP=random   # uniform 60–120°; use a number for a fixed increment
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue

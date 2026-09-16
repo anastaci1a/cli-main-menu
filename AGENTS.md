@@ -39,8 +39,8 @@
 - Keep star hue offsets stable and bounded around one center, concentrated with
   a Gaussian-like distribution rather than independently cycling palette hues.
 - Extend the star field past hints when rows permit, and stretch the option-row
-  brightness falloff to the field's last row. Stars extend through option/hint
-  hint spaces; foreground glyphs occlude them. Exclude baseline stars from
+  brightness falloff to the field's last row. Stars extend through control-hint
+  spaces; foreground glyphs occlude them. Exclude baseline stars from
   option-label spaces (including visible notes) and the circle-to-label gap in
   initial generation and replacement. Relocate newly excluded stars on scroll.
   Preserve other stars beneath text, and never spawn a twinkle on a glyph.
@@ -81,6 +81,14 @@
 - Work buckets may group nearby arrival times, but cell color/timing calculations
   must use exact arrivals. Verify irregular frame intervals with `BENCH_JITTER=1`.
   Use `BENCH_REFERENCE_CACHE=1` when timing an already optimized reference.
+- Remove consumed baseline entries from sweep buckets; do not accumulate stale
+  cells or whitespace in long sessions. Packed color tags must handle hue-cycle
+  wraparound and zero RGB. Check `BENCH_TIME_OFFSET_MS` and custom hue steps.
+- Build sparse foreground indexes inside the frozen repair frame, never reuse
+  them after animation mutates cells. Preserve arbitrary/overlapping spans,
+  UTF-8 markers and strike resets. Cache every changed cell even when suppressing
+  deltas that a foreground repair will replace. Benchmark full repairs with
+  `tools/benchmark-foreground.bash`, including command-substitution cost.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Keep input echo disabled throughout the selector, including redraws between
   reads. Restore the caller's exact terminal settings before returning or exiting.

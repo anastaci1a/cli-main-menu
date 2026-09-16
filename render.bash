@@ -17,6 +17,21 @@ function ez_menu_banner() {
   fi
   star_padding=$(( (banner_width - title_width) / 2 ))
 
+  if (( ${ez_stars_animated:-0} )); then
+    # Animated stars are painted later. Format the blank runs in one builtin
+    # call instead of walking every placeholder cell during startup/resize.
+    printf '\n'
+    for ((star_row = -star_margin; star_row < ${#title_rows[@]} + star_margin; star_row++)); do
+      if (( star_row >= 0 && star_row < ${#title_rows[@]} )); then
+        printf '%*s%s\033[1m%s%s%*s\n' "$star_padding" '' "$C_PINK" "${title_rows[star_row]}" "$C_RESET" "$((banner_width - star_padding - title_width))" ''
+      else
+        printf '%*s\n' "$banner_width" ''
+      fi
+    done
+    printf '\n'
+    return
+  fi
+
   # A sparse star field surrounds the lettering, with no border or outline.
   printf '\n'
   for ((star_row = -star_margin; star_row < ${#title_rows[@]} + star_margin; star_row++)); do
@@ -30,10 +45,6 @@ function ez_menu_banner() {
           printf ' '
           continue
         fi
-      fi
-      if (( ${ez_stars_animated:-0} )); then
-        printf ' '
-        continue
       fi
       star_index=$((RANDOM % ${#star_chars}))
       if [[ ${star_chars:star_index:1} == ' ' ]]; then
@@ -52,7 +63,11 @@ function ez_menu_status_text() {
   local width=${COLUMNS:-80}
   local clock_text host_text=${HOSTNAME%%.*} path_text=$PWD status_text path_width
   (( width < 1 )) && width=1
-  clock_text=$(date '+%a %b %d  %H:%M:%S')
+  if (( BASH_VERSINFO[0] > 4 || BASH_VERSINFO[1] >= 2 )); then
+    printf -v clock_text '%(%a %b %d  %H:%M:%S)T' -1
+  else
+    clock_text=$(date '+%a %b %d  %H:%M:%S')
+  fi
   case $path_text in
     "$HOME") path_text='~' ;;
     "$HOME/"*) path_text="~/${path_text#"$HOME/"}" ;;
@@ -75,15 +90,18 @@ function ez_menu_status() {
 }
 
 function ez_menu_clip() {
-  local text=$1 width=$2 visible=0 result='' color_pattern=$'^\033\\[[0-9;]*m'
+  local text=$1 width=$2 visible=0 result='' plain take color_pattern=$'^\033\\[[0-9;]*m'
   while [[ -n $text ]] && (( visible < width )); do
     if [[ $text =~ $color_pattern ]]; then
       result+=${BASH_REMATCH[0]}
       text=${text#"${BASH_REMATCH[0]}"}
     else
-      result+=${text:0:1}
-      text=${text:1}
-      visible=$((visible + 1))
+      plain=${text%%$'\033['*}
+      # Unrecognized control sequences retain the old one-character behavior.
+      [[ -n $plain ]] || plain=${text:0:1}
+      take=${#plain}
+      (( take > width - visible )) && take=$((width - visible))
+      result+=${plain:0:take} text=${text:take} visible=$((visible + take))
     fi
   done
   printf '%s%s' "$result" "$C_RESET"
@@ -175,21 +193,24 @@ function ez_menu_option_layout() {
 
 # Draw foreground words while revealing the animated field through their spaces.
 function ez_menu_overlay_text() {
-  local row=$1 col=$2 text=$3 color=$4 weight=$5 index word=''
-  for ((index = 0; index < ${#text}; index++)); do
-    if [[ ${text:index:1} == ' ' ]]; then
-      [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"
-      word=''
-      ez_stars_render_span "$row" "$((col + index))" 1
-    else
-      word+=${text:index:1}
-    fi
+  local row=$1 col=$2 text=$3 color=$4 weight=$5 word spaces
+  while [[ $text == *' '* ]]; do
+    word=${text%% *}
+    [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"
+    text=${text#"$word"}
+    spaces=${text%%[! ]*}
+    col=$((col + ${#word}))
+    ez_stars_render_span "$row" "$col" "${#spaces}"
+    col=$((col + ${#spaces})) text=${text#"$spaces"}
   done
-  [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"
+  [[ -z $text ]] || printf '%s%s%s%s' "$color" "$weight" "$text" "$C_RESET"
   return 0
 }
 
 function ez_menu_draw() {
+  # Only the chooser opts into reusing its measured geometry. Standalone calls
+  # keep measuring their own arguments, even if unrelated outer variables exist.
+  local -a cached_geometry=("${marker_width-}" "${label_width-}" "${option_block_width-}" "${option_left-}" "${option_right-}")
   local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
   local marker_color note note_text
   local label_width marker_width option_block_width indent right_width hint hint_width=0 page
@@ -197,7 +218,12 @@ function ez_menu_draw() {
   local -a labels hints
   shift 3
   labels=("$@")
-  read -r marker_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
+  if (( ${ez_menu_draw_cached:-0} )); then
+    marker_width=${cached_geometry[0]} label_width=${cached_geometry[1]} option_block_width=${cached_geometry[2]}
+    indent=${cached_geometry[3]} right_width=${cached_geometry[4]}
+  else
+    read -r marker_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
+  fi
   for ((index = first; index < first + visible; index++)); do
     label=${labels[index]}
     note=${menu_disabled_notes[index]-}
@@ -251,7 +277,8 @@ function ez_menu_draw() {
     fi
   fi
   printf '\r\n'
-  mapfile -t hints < <(ez_menu_hint_lines)
+  if (( ${ez_menu_draw_cached:-0} )); then hints=("${hint_rows[@]}");
+  else mapfile -t hints < <(ez_menu_hint_lines); fi
   for hint in "${hints[@]}"; do
     (( ${#hint} > hint_width )) && hint_width=${#hint}
   done

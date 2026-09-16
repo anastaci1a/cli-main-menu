@@ -19,6 +19,13 @@ function terminal() {
           case 'H': row = args[0] || 1; col = args[1] || 1; break;
           case 'C': col += args[0] || 1; break;
           case 'G': col = args[0] || 1; break;
+          case 'J':
+            assert.equal(args[0], 0, 'erase to end of screen');
+            for (const key of cells.keys()) {
+              const [r, c] = key.split(':').map(Number);
+              if (r > row || (r === row && c >= col)) cells.delete(key);
+            }
+            break;
           case 'm':
             for (let index = 0; index < args.length; index++) {
               const code = args[index];
@@ -28,6 +35,7 @@ function terminal() {
               else if (code === 9) strike = true;
               else if (code === 29) strike = false;
               else if (code === 38 && args[index + 1] === 2) { fg = args.slice(index + 2, index + 5).join(';'); index += 4; }
+              else if (code === 38 && args[index + 1] === 5) { fg = `indexed:${args[index + 2]}`; index += 2; }
               else assert.fail(`unsupported SGR ${code}`);
             }
             break;
@@ -37,6 +45,8 @@ function terminal() {
       }
       const glyph = String.fromCodePoint(stream.codePointAt(offset));
       offset += glyph.length;
+      if (glyph === '\r') { col = 1; continue; }
+      if (glyph === '\n') { row++; continue; }
       const key = `${row}:${col++}`;
       if (glyph === ' ' && !strike) cells.delete(key);
       else cells.set(key, `${glyph}:${fg}:${+bold}:${+strike}`);

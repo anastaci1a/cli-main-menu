@@ -524,6 +524,14 @@ printf 'PASS half baseline quantity with unchanged horizon weights and twinkle r
     population=$((${#stars_char[@]} - ${#stars_birth[@]} + ${#stars_replenish[@]} + stars_replace_tail - stars_replace_head))
     (( population == initial_population ))
   done
+  # Repeated consumption must not leave stale or duplicate sweep work behind.
+  indexed=()
+  for members in "${stars_star_band[@]}"; do
+    for cell in $members; do
+      [[ ${stars_char[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${indexed[cell]+present} ]]
+      indexed[cell]=1
+    done
+  done
 )
 printf 'PASS population replacement at weighted empty cells, future sweeps, and full-field deferral\n'
 
@@ -646,3 +654,67 @@ printf 'PASS initial/replacement option-space exclusions, unchanged twinkles, an
   [[ ${stars_seen[160]+present} && -n $stars_output ]]
 )
 printf 'PASS 500 ms eased replacement color fade, final frame, shimmer, and hidden/collision cleanup\n'
+
+(
+  COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
+  for hue_step in 0 1 74 359 360; do
+    EZ_MENU_SWEEP_HUE_STEP=$hue_step
+    ez_stars_init
+    ez_stars_layout 10 5 53 2
+    stars_char=([160]='*') stars_palette=([160]=0) stars_saturation=([160]=700) stars_hue_offset=([160]=0)
+    stars_birth=() stars_text_char=() stars_occluded=()
+    stars_next=999999999 stars_horizon_next=999999999
+    ez_stars_build_work
+    for cycle in 358 359 360 361 720; do
+      ez_stars_prefetch "$((cycle - 1))"
+      for phase in 30 120 1600; do
+        ez_stars_tick "$((cycle * stars_period + phase))"
+        actual=${stars_seen[160]}
+        ez_stars_sweep 3 0 "$cycle" "$phase"
+        ez_stars_color 0 "$stars_color_cycle" "$stars_white" 100 1000 700 0
+        [[ $actual == "$stars_r;$stars_g;$stars_b:"* ]]
+      done
+    done
+  done
+  # Zero RGB must be a valid cached color, distinct from a missing cache entry.
+  stars_value[0]=0 stars_rgb_cache=() stars_color_pair=() stars_seen=()
+  ez_stars_prefetch 800
+  ez_stars_tick "$((800 * stars_period + 1600))"
+  [[ ${stars_seen[160]} == '0;0;0:0:*' ]]
+)
+printf 'PASS packed-color cache wraparound, custom hue steps, skipped cycles, and black RGB\n'
+
+(
+  stars_cell_render=()
+  normal=$'\033[0;0m\033[38;2;100;150;200m'
+  strike=$'\033[0;9m\033[38;2;40;50;60m'
+  stars_cell_render=([0]="$normal○$C_RESET" [1]="$strike●$C_RESET" [7]="${normal}m$C_RESET" [10]="${normal}*$C_RESET" [159]="${strike}+$C_RESET" [170]="${normal}.$C_RESET")
+  spans=('1 0 80' '1 0 0' '1 1 3' '3 0 30' '1 0 80' '2 75 5')
+  for COLUMNS in 1 80; do
+    stars_repair_active=0
+    dense=$(for span in "${spans[@]}"; do ez_stars_render_span $span; done)
+    sparse=$(ez_stars_prepare_repair; for span in "${spans[@]}"; do ez_stars_render_span $span; done)
+    [[ $dense == "$sparse" ]]
+  done
+)
+printf 'PASS sparse repairs preserve UTF-8, strike gaps, empty/overlapping spans, and narrow screens\n'
+
+(
+  COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')
+  # Compare full and partial repair suppression against the ordinary tick. Each
+  # run starts from the same seed, including the replacement/twinkle state.
+  for limit in -1 0 800; do
+    RANDOM=4183
+    ez_stars_init
+    ez_stars_layout 10 5 53 2
+    stars_text_char=() stars_occluded=()
+    ez_stars_build_work
+    ez_stars_tick 3990
+    ez_stars_tick 4750 "$limit"
+    repair=$(for ((row = stars_top; row <= stars_bottom; row++)); do ez_stars_render_span "$row" 0 "$COLUMNS"; done)
+    if (( limit == -1 )); then reference=$repair;
+    else [[ $repair == "$reference" ]]; fi
+    if (( limit == 0 )); then [[ -z $stars_output ]]; fi
+  done
+)
+printf 'PASS foreground repairs suppress redundant deltas while retaining exact final cells\n'

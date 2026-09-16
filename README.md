@@ -110,10 +110,10 @@ in about 1.47 seconds. Broad slow shoulders give each outer quarter of the diago
 40% of the travel time, making the ease visible beyond the tiny corners. The middle
 keeps the previous sweep's peak speed; each flash still rises for 60 ms and fades
 for 240 ms. Stars quickly approach white, then slowly regain saturation with
-a 70° hue shift that persists after the band passes. Star white peaks also fade
-from full brightness at the top toward black one row beyond the field, capped
-by the existing row brightness. The bottom uses the step before black. This
-deeper shimmer fade leaves ordinary twinkle brightness and text accents intact.
+a 74° hue shift that persists after the band passes. Star shimmer peaks are pure
+white across the top 30% of the field. Over the remaining 70%, peaks fade toward
+black one row beyond the field; the bottom uses the step before black. Ordinary
+twinkle brightness and text accent fades remain independent.
 Stars and title characters briefly turn bold around their own near-white sweep
 peak, then return to normal weight as they fade. The selected option stays bold.
 The star field now reaches the control hints and up to two rows below them when
@@ -128,7 +128,12 @@ density above baseline. Uniform births take priority, so the horizon cannot
 crowd out the top when reaching the one-birth-per-frame limit. Both streams use
 the same 2.5× rate setting and smooth sweep envelope.
 
-Stars extend behind the option block and control hints, including their spaces.
+Baseline stars leave spaces inside option labels and the circle-to-label gap
+empty, including spaces in visible disabled notes. Initial generation and
+replacement use the same exclusions. If scrolling places these spaces over
+existing baseline stars, those stars relocate using the normal replacement fade.
+Twinkles retain their existing spawn rules. Stars still extend through control
+hint spaces and around the option block.
 Foreground letters and circle markers always win over stars. The background
 retains its state under text, so scrolling reveals existing stars rather than
 rerandomizing them. The title keeps its surrounding clear space.
@@ -139,7 +144,7 @@ so most are near the center. Each star also gets a random baseline saturation
 between its palette color's original saturation and 80%, retained for its lifetime.
 The title and option circles join the same sweep with a shared hue 180°
 opposite the center of the star palette. Their baseline hue advances by the same
-70° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
+74° per sweep. Selected-option bolding and disabled-marker strike/dimming remain
 intact during the title's bold flash. Control hints share the title
 hue at 35% saturation and 55% brightness, and join the same diagonal sweep.
 During each sweep the full-width status background eases from
@@ -160,7 +165,7 @@ EZ_MENU_TWINKLE_RATE_PERCENT=250 # 100 = original rate; 250 = 2.5x (range 1–10
 EZ_MENU_STAR_DENSITY_PERCENT=50 # baseline quantity relative to the original (range 0–100)
 EZ_MENU_HORIZON_DENSITY_PERCENT=600 # bottom vs top density; 100 = flat (range 100–800)
 EZ_MENU_SWEEP_DURATION_MS=1467  # total movement and final flash
-EZ_MENU_SWEEP_HUE_STEP=70       # degrees added per sweep
+EZ_MENU_SWEEP_HUE_STEP=74       # degrees added per sweep
 EZ_MENU_STAR_SATURATION_MAX=800 # thousandths: 800 = 80%
 EZ_MENU_STAR_HUE_SPREAD=60      # total range centered on the palette hue
 EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
@@ -273,7 +278,7 @@ and device speed vary. The larger stress case can still exceed the 50 ms frame
 budget at the busiest point. These optimization gains involved no reduction in
 visual effects or density; the later 50% baseline setting is a separate visual choice.
 
-With the current 50% baseline, replenishment, and deeper shimmer fade, a separate
+With the 50% baseline, replenishment, and original full-height shimmer fade, a separate
 run (including replacement fade-ins) measured 7 ms mean / 20 ms p95 at 80×24
 and 16 ms mean / 51 ms p95 at 160×40.
 Those figures include the intentional density change and are not a measurement

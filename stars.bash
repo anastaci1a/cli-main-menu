@@ -20,7 +20,7 @@ function ez_stars_init() {
   local -a levels=(0 95 135 175 215 255)
   stars_period=${EZ_MENU_SWEEP_INTERVAL_MS:-4000}
   stars_duration=${EZ_MENU_SWEEP_DURATION_MS:-1467}
-  stars_step=${EZ_MENU_SWEEP_HUE_STEP:-70}
+  stars_step=${EZ_MENU_SWEEP_HUE_STEP:-74}
   stars_sat_max=${EZ_MENU_STAR_SATURATION_MAX:-800}
   stars_accent_offset=${EZ_MENU_SWEEP_ACCENT_OFFSET:-180}
   stars_hue_spread=${EZ_MENU_STAR_HUE_SPREAD:-60}
@@ -47,7 +47,7 @@ function ez_stars_init() {
   (( stars_hue_spread > 360 )) && stars_hue_spread=360
   [[ $stars_period =~ ^[1-9][0-9]{0,5}$ ]] || stars_period=4000
   [[ $stars_duration =~ ^[1-9][0-9]{0,4}$ ]] || stars_duration=1467
-  [[ $stars_step =~ ^[0-9]{1,3}$ ]] || stars_step=70
+  [[ $stars_step =~ ^[0-9]{1,3}$ ]] || stars_step=74
   stars_step=$((10#$stars_step))
   [[ $stars_sat_max =~ ^[0-9]{1,4}$ ]] || stars_sat_max=800
   stars_sat_max=$((10#$stars_sat_max))
@@ -88,6 +88,7 @@ function ez_stars_init() {
   stars_text_dirty=()
   stars_star_dirty=() stars_band_member=() stars_replenish=() stars_replace_queue=()
   stars_replacement_birth=()
+  stars_baseline_blocked=() stars_clear_pending=()
   stars_replace_head=0 stars_replace_tail=0
   stars_cached_target=() stars_cached_prev=() stars_cached_next=()
   stars_prefetch_cycle=-1 stars_prefetch_cursor=0 stars_prefetch_cells=()
@@ -168,6 +169,8 @@ function ez_stars_layout() {
   stars_cached_target=() stars_cached_prev=() stars_cached_next=() stars_prefetch_cycle=-1
   stars_star_dirty=() stars_replenish=() stars_replace_queue=()
   stars_replacement_birth=()
+  stars_clear_pending=()
+  ez_stars_baseline_mask "$banner_count" "${6:-0}" "${label_width:-0}" "${@:7}"
   stars_replace_head=0 stars_replace_tail=0 stars_peak=()
   # Leave the final terminal row free so repainting cannot scroll the screen.
   stars_top=3 stars_bottom=$((hint_end + 2))
@@ -191,19 +194,45 @@ function ez_stars_layout() {
       brightness=$((65 - 60 * (row - option_start) / (stars_bottom - option_start + 1)))
     fi
     stars_fade[row]=$brightness
-    # The shimmer's white endpoint fades all the way toward black, sampled on
-    # [0, 1): its last visible row remains one step above black.
-    stars_peak[row]=$((1000 * (stars_bottom - row + 1) / (stars_bottom - stars_top + 1)))
+    # The top 30% peaks at white; the remaining 70% approaches black on [0, 1).
+    # Keep at least one RGB step for unusually tall fields (8-bit quantization).
+    brightness=$((10000 * (stars_bottom - row + 1) / (7 * (stars_bottom - stars_top + 1))))
+    (( brightness > 1000 )) && brightness=1000
+    (( brightness < 4 )) && brightness=4
+    stars_peak[row]=$brightness
     for ((col = 0; col < COLUMNS; col++)); do
       (( col >= mask_left && col < mask_right )) && continue
       cell=$(( (row - 1) * COLUMNS + col ))
       stars_cells+=("$cell")
+      [[ ${stars_baseline_blocked[cell]+present} ]] && continue
       if (( (RANDOM * 32768 + RANDOM) % 800000 < stars_density[row] * stars_density_percent )); then
         stars_char[$cell]=${chars:RANDOM%3:1}
         stars_palette[$cell]=$((RANDOM % 3))
         ez_stars_pick_saturation "$cell"
         ez_stars_pick_hue "$cell"
       fi
+    done
+  done
+}
+
+function ez_stars_baseline_mask() {
+  local banner_count=$1 first=$2 width=$3 index row col cell label note
+  local -a labels=("${@:4}")
+  stars_baseline_blocked=()
+  for ((index = first; index < first + visible && index < ${#labels[@]}; index++)); do
+    row=$((banner_count + 3 + index - first))
+    (( row >= LINES )) && break
+    cell=$(((row - 1) * COLUMNS + option_left + 1))
+    (( option_left + 1 < COLUMNS )) && stars_baseline_blocked[cell]=1
+    label=${labels[index]} note=${menu_disabled_notes[index]-}
+    if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= width )); then
+      label+=" $note"
+    fi
+    label=${label:0:width}
+    for ((col = 0; col < ${#label}; col++)); do
+      [[ ${label:col:1} == ' ' ]] || continue
+      cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
+      stars_baseline_blocked[cell]=1
     done
   done
 }
@@ -237,6 +266,18 @@ function ez_stars_text_layout() {
   local label note label_width marker_width block_width indent right_width
   stars_occluded=()
   read -r marker_width label_width block_width indent right_width < <(ez_menu_option_layout "${labels[@]}")
+  ez_stars_baseline_mask "$banner_count" "$first" "$label_width" "${labels[@]}"
+  # Scrolling can move a label's spaces over existing baseline stars. Relocate
+  # those stars through the same weighted replacement queue, keeping population.
+  for cell in "${!stars_baseline_blocked[@]}"; do
+    [[ ${stars_char[$cell]+present} && ! ${stars_birth[$cell]+present} ]] || continue
+    stars_replace_queue[stars_replace_tail]=$cell
+    stars_replace_tail=$((stars_replace_tail + 1))
+    stars_clear_pending[cell]=1
+    unset 'stars_char[$cell]' 'stars_palette[$cell]' 'stars_saturation[$cell]' 'stars_hue_offset[$cell]'
+    unset 'stars_replacement_birth[cell]' 'stars_seen[$cell]' 'stars_settled[cell]' 'stars_cell_render[$cell]'
+    unset 'stars_cached_target[cell]' 'stars_cached_prev[cell]' 'stars_cached_next[cell]'
+  done
   stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
   if (( compact )); then
     text=$(ez_menu_title_text)
@@ -480,7 +521,7 @@ function ez_stars_replace() {
   origin=${stars_replace_queue[stars_replace_head]}
   for ((attempt = 0; attempt < 32; attempt++)); do
     cell=${stars_cells[(RANDOM * 32768 + RANDOM) % count]}
-    [[ $cell == "$origin" || ${stars_char[$cell]+present} || ${stars_birth[$cell]+present} ]] && continue
+    [[ $cell == "$origin" || ${stars_char[$cell]+present} || ${stars_birth[$cell]+present} || ${stars_baseline_blocked[cell]+present} ]] && continue
     row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
     # Same spatial weights as initial generation; the overall 50% multiplier
     # cancels when choosing where to put one replacement.
@@ -602,6 +643,8 @@ function ez_stars_tick() {
   local geometry="$COLUMNS:$stars_top:${stars_sweep_bottom:-$stars_bottom}"
   local -a updates=() work_stars work_text
   local lower upper bucket IFS=$' \t\n'
+  for cell in "${!stars_clear_pending[@]}"; do updates[cell]=':0: '; done
+  stars_clear_pending=()
   if [[ $geometry != "$stars_geometry_key" ]]; then
     stars_arrival_cell=() stars_settled=() stars_text_settled=() stars_geometry_key=$geometry
     stars_work_ready=0
@@ -702,10 +745,9 @@ function ez_stars_tick() {
     fi
     (( row = cell / COLUMNS + 1, fade = stars_fade[row], 1 ))
     # Keep ordinary/twinkle colors intact. Only the sweep's white endpoint uses
-    # the deeper full-height fade; never exceed the row's existing white peak.
+    # the uniform upper 30% and exclusive fade over the remaining 70%.
     peak=${stars_peak[row]:-$((fade * 10))}
-    (( peak = peak > fade * 10 ? fade * 10 : peak,
-       peak = fade * 10 - (fade * 10 - peak) * sweep_white / 1000,
+    (( peak = fade * 10 - (fade * 10 - peak) * sweep_white / 1000,
        color_weight = (1000 - white) * fade * 10, white_value = 255 * white * peak,
        stars_r = ((value >> 16) * color_weight + white_value) * intensity / 1000000000,
        stars_g = (((value >> 8) & 255) * color_weight + white_value) * intensity / 1000000000,

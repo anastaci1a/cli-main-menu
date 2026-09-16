@@ -40,8 +40,11 @@
   a Gaussian-like distribution rather than independently cycling palette hues.
 - Extend the star field past hints when rows permit, and stretch the option-row
   brightness falloff to the field's last row. Stars extend through option/hint
-  spaces; foreground glyphs occlude them. Preserve stars beneath text across
-  scrolling, and never spawn a twinkle on a glyph. The footer fades into darkness.
+  hint spaces; foreground glyphs occlude them. Exclude baseline stars from
+  option-label spaces (including visible notes) and the circle-to-label gap in
+  initial generation and replacement. Relocate newly excluded stars on scroll.
+  Preserve other stars beneath text, and never spawn a twinkle on a glyph.
+  The footer fades into darkness.
 - Weight individual twinkle opportunities smoothly through the sweep. A sweep
   reduces their frequency but must never switch births off abruptly. Existing
   twinkles continue their fade and share the crossing white/hue treatment.
@@ -57,9 +60,10 @@
 - Sample the downward fade with an exclusive bottom endpoint: the last visible
   row uses the color step before the darkest endpoint, never that endpoint itself.
 - Default baseline quantity is 50% of the original, independent of the 2.5×
-  twinkle rate. Star shimmer white peaks approach black across the full field
-  height, with an exclusive bottom endpoint and no increase over the existing
-  row peak. Ordinary twinkle brightness and text accent fades remain independent.
+  twinkle rate. Star shimmer peaks are pure white throughout the top 30%;
+  the remaining 70% approaches black with an exclusive bottom endpoint. Ordinary
+  twinkle brightness and text accent fades remain independent. Default hue
+  rotation is 74° per sweep.
 - Status backgrounds ease to the settled hint color during each sweep.
 - Bold stars and title cells briefly at their own near-white sweep peaks, then
   restore normal weight. Keep selected-option bolding and disabled styling intact.

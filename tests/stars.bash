@@ -69,6 +69,7 @@ printf 'PASS extended field, text masks, stretched fade, and saturation bounds\n
 # Three fixed stars span the sweep's diagonal; suppress random births.
 COLUMNS=80 stars_top=3 stars_bottom=16 stars_sweep_bottom=16
 stars_cells=(160 239 1279) stars_fade=([3]=100 [16]=5)
+stars_peak=([3]=1000 [16]=50)
 stars_char=([160]='.' [239]='+' [1279]='*')
 stars_palette=([160]=0 [239]=0 [1279]=0) stars_birth=() stars_seen=()
 stars_saturation=() stars_hue_offset=()
@@ -278,7 +279,7 @@ printf 'PASS responsive hint sweep and eased status-bar colors\n'
 EZ_MENU_SWEEP_INTERVAL_MS=0 EZ_MENU_SWEEP_DURATION_MS=nope EZ_MENU_SWEEP_HUE_STEP=-1
 EZ_MENU_TWINKLE_ADVANCE_MS=invalid EZ_MENU_TWINKLE_RATE_PERCENT=0
 ez_stars_init
-[[ $stars_period == 4000 && $stars_duration == 1467 && $stars_step == 70 ]]
+[[ $stars_period == 4000 && $stars_duration == 1467 && $stars_step == 74 ]]
 [[ $stars_twinkle_advance == 500 && $stars_twinkle_rate == 250 && $stars_twinkle_delay == 200 ]]
 printf 'PASS invalid animation settings use safe defaults\n'
 
@@ -416,7 +417,7 @@ for density in "${stars_density[@]}"; do [[ $density == 1000 ]]; done
 printf 'PASS denser dim horizon, weighted single twinkles, and flat-density override\n'
 
 # Text occludes glyph cells only; an underlying star survives navigation, and
-# spaces inside labels/hints stay part of the field on repairs as well as ticks.
+# hint spaces stay part of the field on repairs as well as ticks.
 COLUMNS=80 LINES=24 visible=1 title_rows=('T') hint_rows=('Go now')
 labels=('A B') menu_enabled=(1) menu_disabled_notes=()
 read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
@@ -427,11 +428,12 @@ glyph=$((12 * COLUMNS + option_left + 2)) gap=$((glyph + 1))
 stars_char=([$glyph]='*' [$gap]='+') stars_palette=([$glyph]=0 [$gap]=0)
 stars_birth=() stars_seen=() stars_saturation=() stars_hue_offset=()
 stars_next=999999 stars_horizon_next=999999
+ez_stars_text_layout 10 1 2 0 0 0 "${labels[@]}"
 ez_stars_tick 0
-[[ ! ${stars_seen[$glyph]+present} && ${stars_seen[$gap]} == *':+' ]]
+[[ ! ${stars_seen[$glyph]+present} && ! ${stars_char[$gap]+present} ]]
 [[ ${stars_char[$glyph]} == '*' ]]
 rendered=$(ez_menu_overlay_text 13 "$((option_left + 2))" 'A B' "$C_WHITE" "$C_BOLD")
-[[ $rendered == *"${C_BOLD}A"* && $rendered == *"${stars_cell_render[$gap]}"* && $rendered == *"${C_BOLD}B"* ]]
+[[ $rendered == *"${C_BOLD}A"* && $rendered == *"${C_BOLD}B"* ]]
 ez_stars_text_layout 10 1 2 0 0 0 ''
 ez_stars_tick 10
 [[ ${stars_seen[$glyph]} == *':*' ]]
@@ -441,7 +443,7 @@ stars_cells=("$glyph") stars_char=() stars_birth=()
 stars_next=0 stars_horizon_next=0
 ez_stars_tick 2000
 [[ ${#stars_birth[@]} == 0 ]]
-printf 'PASS transparent text spaces, foreground occlusion, and preserved underlying stars\n'
+printf 'PASS clear option spaces, foreground occlusion, and preserved underlying glyph stars\n'
 
 # The baseline multiplier changes quantity, not the horizon weights or twinkle
 # clock. A large sample distinguishes half the former population from 50% fill.
@@ -539,16 +541,59 @@ printf 'PASS population replacement at weighted empty cells, future sweeps, and 
     instant=$((4000 + stars_sweep_arrival[distance] + stars_rise))
     ez_stars_tick "$instant"
     peak=${stars_peak[row]}
-    (( peak > stars_fade[row] * 10 )) && peak=$((stars_fade[row] * 10))
     level=$((255 * peak / 1000))
     [[ ${stars_seen[$cell]} == "$level;$level;$level:1:*" ]]
     (( level > 0 && level <= previous ))
+    if (( (row - stars_top) * 10 < (stars_bottom - stars_top + 1) * 3 )); then
+      [[ $level == 255 ]]
+    fi
     previous=$level
   done
   [[ ${stars_peak[$stars_top]} == 1000 ]]
-  (( stars_peak[stars_bottom] == 1000 / (stars_bottom - stars_top + 1) ))
+  (( stars_peak[stars_bottom] == 10000 / (7 * (stars_bottom - stars_top + 1)) ))
 )
-printf 'PASS full-height shimmer peak fade with an exclusive black endpoint\n'
+printf 'PASS uniform white upper-30-percent shimmer and exclusive black endpoint\n'
+
+(
+  COLUMNS=80 LINES=24 visible=2 title_rows=('T') hint_rows=('Go now')
+  labels=('A B' 'Longer Label') menu_enabled=(1 0) menu_disabled_notes=([1]='(not ready)')
+  read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
+  ez_stars_init
+  ez_stars_layout 10 1 1 2 2 0 "${labels[@]}"
+  gap=$((12 * COLUMNS + option_left + 3)) marker_gap=$((gap - 2)) allowed=$((gap + 30))
+  [[ ${stars_baseline_blocked[gap]} == 1 && ${stars_baseline_blocked[marker_gap]} == 1 ]]
+  for cell in "${!stars_baseline_blocked[@]}"; do [[ ! ${stars_char[$cell]+present} ]]; done
+  ez_stars_text_layout 10 1 2 0 0 0 "${labels[@]}"
+  # Replacement sampling cannot pick either class of protected whitespace.
+  stars_char=() stars_birth=() stars_cells=("$gap" "$marker_gap" "$allowed")
+  stars_replace_queue=([0]=161) stars_replace_head=0 stars_replace_tail=1
+  for ((trial = 0; trial < 20 && stars_replace_tail; trial++)); do ez_stars_replace 1000; done
+  [[ ${stars_char[$allowed]+present} && ! ${stars_char[$gap]+present} && ! ${stars_char[$marker_gap]+present} ]]
+  # The baseline exclusion does not change the existing twinkle spawn mask.
+  stars_cells=("$gap") stars_spawned=0
+  ez_stars_try_spawn 1100 0
+  [[ ${stars_birth[$gap]} == 1100 ]]
+  # Scrolling onto a new internal space relocates an underlying baseline star.
+  stars_birth=() stars_char=([$gap]='*') stars_replacement_birth=()
+  ez_stars_text_layout 10 1 2 0 0 0 'ABCD' 'Longer Label'
+  [[ ${stars_char[$gap]+present} && ! ${stars_baseline_blocked[gap]+present} ]]
+  ez_stars_text_layout 10 1 2 0 0 0 "${labels[@]}"
+  [[ ! ${stars_char[$gap]+present} && ${stars_clear_pending[gap]} == 1 && $stars_replace_tail == 1 ]]
+  stars_cells=("$allowed") stars_char=() stars_next=999999 stars_horizon_next=999999
+  ez_stars_build_work
+  ez_stars_tick 2000
+  [[ ${stars_char[$allowed]+present} && ${#stars_clear_pending[@]} == 0 ]]
+  # A note that no longer fits must not leave its old whitespace exclusions.
+  COLUMNS=12
+  read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
+  ez_stars_layout 10 1 1 2 2 0 "${labels[@]}"
+  [[ ${#stars_baseline_blocked[@]} == 4 ]]
+  for cell in "${!stars_baseline_blocked[@]}"; do
+    (( cell / COLUMNS + 1 >= 13 && cell / COLUMNS + 1 <= 14 ))
+    (( cell % COLUMNS >= option_left + 1 && cell % COLUMNS < option_left + 2 + label_width ))
+  done
+)
+printf 'PASS initial/replacement option-space exclusions, unchanged twinkles, and scroll relocation\n'
 
 (
   COLUMNS=80 LINES=24 visible=4 hint_rows=('controls')

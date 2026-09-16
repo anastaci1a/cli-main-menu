@@ -315,6 +315,14 @@ are reused. The Gaussian hue sampler retains the exact same twelve random draws
 while reducing shell dispatch overhead. Animation output is unchanged; repair
 output uses fewer escape codes to produce the same cells.
 
+The repair cache now stores compact cell tokens rather than preformatted ANSI.
+Changed cells update it directly, so full repairs can discard their redundant
+delta list in one operation. Repairs combine style and color into a single
+escape sequence, cutting another 6% from full-repair output at 160×40.
+Two paired runs measured about 24.23 → 23.57 ms per sweep frame at 240×60.
+At 160×40, full repairs including their animation update averaged 44.10 →
+41.16 ms during the shimmer; idle repairs remained around 29–30 ms.
+
 Run a deterministic benchmark without opening the menu:
 
 ```bash
@@ -345,6 +353,8 @@ long-session behavior (use the same setting for both reference and new renderer)
 `tools/benchmark-foreground.bash` measures full menu repairs; its optional fourth
 and fifth arguments load reference `render.bash` and `stars.bash` files. It uses
 the same `BENCH_CAPTURE` format for comparing complete foreground frames.
+Set `BENCH_REFERENCE_CACHE=1` when its reference supports sparse repair indexes,
+and `BENCH_INCLUDE_TICK=1` to include the animation update preceding each repair.
 
 ## Git
 

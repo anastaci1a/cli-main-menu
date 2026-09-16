@@ -95,6 +95,10 @@
   UTF-8 markers and strike resets. Cache every changed cell even when suppressing
   deltas that a foreground repair will replace. Benchmark full repairs with
   `tools/benchmark-foreground.bash`, including command-substitution cost.
+- `stars_cell_render` stores `R;G;B:style:glyph` tokens. Update it when a cell
+  changes, before suppressing repair-covered deltas; retirement clears it.
+  Encode ANSI only when emitting output or composing a repair. Keep UTF-8 and
+  literal colon glyphs intact, and reset strikethrough across blank gaps.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Keep input echo disabled throughout the selector, including redraws between
   reads. Restore the caller's exact terminal settings before returning or exiting.

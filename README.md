@@ -255,6 +255,10 @@ reuses cursor/style/color state, and visits only active twinkles and the moving
 shimmer band. Integer lookup tables preserve the original easing exactly.
 Upcoming hues are prepared in small idle-frame batches, and arrow movement
 updates the affected markers without rebuilding the field.
+The work index groups arrivals into 16 ms buckets while every cell retains its
+exact millisecond timing. Twinkle and replacement easing use exact lookup tables;
+batched integer calculations and combined terminal style/color commands reduce
+shell and terminal parsing overhead.
 
 Measured over two identical runs on x86_64 Linux / Bash 5.3.3, at the original
 100% baseline density before the separate change to a 50% default:
@@ -274,6 +278,9 @@ run (including replacement fade-ins) measured 7 ms mean / 20 ms p95 at 80×24
 and 16 ms mean / 51 ms p95 at 160×40.
 Those figures include the intentional density change and are not a measurement
 of optimization alone.
+
+A further optimization pass, preserving those same frames, reduced sweep times
+to about 5 ms mean / 16 ms p95 at 80×24 and 13 ms mean / 44 ms p95 at 160×40.
 
 Run a deterministic benchmark without opening the menu:
 
@@ -296,6 +303,9 @@ node tools/compare-frames.cjs /tmp/menu-before.frames /tmp/menu-after.frames
 Set `BENCH_SCENARIO=1` on both capture commands to include selection changes,
 scrolling, resizing, and a pause that skips multiple sweeps. Optimization was
 checked against 720 matching frames across normal, large, and changing layouts.
+The further pass also checks irregular frame intervals with `BENCH_JITTER=1`.
+For a reference renderer that already supports work buckets, use
+`BENCH_REFERENCE_CACHE=1` to include its caches in a fair timing comparison.
 
 ## Git
 

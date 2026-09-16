@@ -74,6 +74,9 @@
   movement updates dirty markers. Long pauses must settle every affected cell;
   idle ticks visit active twinkles, not the whole field. Bound color prefetch
   work and cache size, and do not add animation processes or runtime dependencies.
+- Work buckets may group nearby arrival times, but cell color/timing calculations
+  must use exact arrivals. Verify irregular frame intervals with `BENCH_JITTER=1`.
+  Use `BENCH_REFERENCE_CACHE=1` when timing an already optimized reference.
 - Preserve alternate-screen and cursor/focus cleanup on normal exit and signals.
 - Keep input echo disabled throughout the selector, including redraws between
   reads. Restore the caller's exact terminal settings before returning or exiting.

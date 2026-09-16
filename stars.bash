@@ -63,7 +63,21 @@ function ez_stars_init() {
   stars_travel=$((stars_duration - flash))
   stars_rise=$((flash / 5)) stars_tail=$((flash - stars_rise))
   stars_flash=()
+  stars_twinkle_curve=() stars_replacement_curve=() stars_twinkle_glyph=()
   local age amount
+  for ((age = 0; age < 900; age++)); do
+    if (( age < 120 )); then amount=$((age * 1000 / 120));
+    else amount=$((1000 - (age - 120) * 1000 / 780)); fi
+    amount=$((amount * amount * (3000 - 2 * amount) / 1000000))
+    stars_twinkle_curve[age]=$amount
+    if (( amount < 250 )); then stars_twinkle_glyph[age]='.';
+    elif (( amount < 650 )); then stars_twinkle_glyph[age]='+';
+    else stars_twinkle_glyph[age]='*'; fi
+    if (( age < 500 )); then
+      amount=$((age * 2))
+      stars_replacement_curve[age]=$((amount * amount * (3000 - 2 * amount) / 1000000))
+    fi
+  done
   for ((age = 0; age < flash; age++)); do
     if (( age < stars_rise )); then amount=$((age * 1000 / stars_rise));
     else amount=$((1000 - (age - stars_rise) * 1000 / stars_tail)); fi
@@ -313,7 +327,8 @@ function ez_stars_twinkle_timing() {
 }
 
 # Rebuild only when the viewport or foreground text changes. Buckets are indexed
-# by arrival millisecond, so a tick visits the moving band rather than the field.
+# in 16 ms buckets, so a tick visits the moving band rather than the field.
+# Each cell still uses its exact millisecond arrival: buckets only select work.
 function ez_stars_build_work() {
   local cell row col distance arrival bottom=${stars_sweep_bottom:-$stars_bottom}
   stars_star_band=() stars_text_band=() stars_arrival_cell=() stars_band_member=()
@@ -324,12 +339,12 @@ function ez_stars_build_work() {
   done
   for cell in "${!stars_char[@]}"; do
     [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} ]] && continue
-    arrival=${stars_arrival_cell[cell]}
+    arrival=$((stars_arrival_cell[cell] / 16))
     stars_star_band[arrival]+=" $cell"
     stars_band_member[cell]=1
   done
   for cell in "${!stars_text_char[@]}"; do
-    arrival=${stars_arrival_cell[cell]}
+    arrival=$((stars_arrival_cell[cell] / 16))
     stars_text_band[arrival]+=" $cell"
   done
   stars_geometry_key="$COLUMNS:$stars_top:$bottom"
@@ -479,6 +494,7 @@ function ez_stars_replace() {
     if [[ ${stars_band_member[cell]:-0} != 1 ]] && (( stars_work_ready )); then
       distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
       arrival=${stars_sweep_arrival[distance]} stars_arrival_cell[cell]=$arrival
+      arrival=$((arrival / 16))
       stars_star_band[arrival]+=" $cell" stars_band_member[cell]=1
     fi
     unset 'stars_replace_queue[stars_replace_head]'
@@ -581,7 +597,8 @@ function ez_stars_tick() {
   local elapsed=$1 cycle phase cell row col age white intensity color_cycle char token style
   local sweeping=0 stable=0 stars_spawned=0
   local arrival local_phase expected distance bottom=${stars_sweep_bottom:-$stars_bottom}
-  local rgb_key value fade palette saturation offset peak sweep_white
+  local rgb_key value fade palette saturation offset peak sweep_white active_flash
+  local color_weight white_value flash_duration=$((stars_rise + stars_tail))
   local geometry="$COLUMNS:$stars_top:${stars_sweep_bottom:-$stars_bottom}"
   local -a updates=() work_stars work_text
   local lower upper bucket IFS=$' \t\n'
@@ -622,6 +639,7 @@ function ez_stars_tick() {
       (( cycle == stars_render_cycle && stars_was_sweeping )) && lower=$((stars_last_phase - stars_rise - stars_tail + 1))
       (( lower < 0 )) && lower=0
       (( ! sweeping || upper > stars_travel )) && upper=$stars_travel
+      (( lower /= 16, upper /= 16, 1 ))
       for ((bucket = lower; bucket <= upper; bucket++)); do
         # Intentional splitting: bucket contents are space-separated cell IDs.
         work_stars+=(${stars_star_band[bucket]-})
@@ -638,52 +656,38 @@ function ez_stars_tick() {
     [[ ${stars_text_char[$cell]+present} || ${stars_occluded[$cell]+present} ]] && continue
     # Between effects, unchanged stars cost no color conversion or terminal I/O.
     if (( stable )) && [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${stars_replacement_birth[cell]+present} ]]; then continue; fi
-    row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
     arrival=${stars_arrival_cell[cell]-}
     if [[ -z $arrival ]]; then
+      (( row = cell / COLUMNS + 1, col = cell % COLUMNS, 1 ))
       distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
       arrival=${stars_sweep_arrival[distance]} stars_arrival_cell[cell]=$arrival
     fi
-    local_phase=$((phase - arrival)) expected=$cycle
-    (( sweeping && local_phase < 0 )) && expected=$((cycle - 1))
+    (( local_phase = phase - arrival,
+       expected = cycle - (sweeping && local_phase < 0),
+       active_flash = sweeping && local_phase >= 0 && local_phase < flash_duration, 1 ))
     if [[ ${stars_seen[$cell]+present} && ! ${stars_birth[$cell]+present} && ! ${stars_replacement_birth[cell]+present} ]] &&
-       (( ! sweeping || local_phase < 0 || local_phase >= stars_rise + stars_tail )); then
+       (( ! active_flash )); then
       [[ ${stars_settled[cell]:--1} == "$expected" ]] && continue
     fi
     char=${stars_char[$cell]} white=0 intensity=1000 color_cycle=$cycle style=0 sweep_white=0
     if [[ ${stars_birth[$cell]+present} ]]; then
       age=$((elapsed - stars_birth[$cell]))
-      if (( age < 120 )); then
-        ez_stars_ease "$((age * 1000 / 120))"
-      else
-        ez_stars_ease "$((1000 - (age - 120) * 1000 / 780))"
-      fi
-      intensity=$stars_eased white=$stars_eased
-      if (( intensity < 250 )); then char='.';
-      elif (( intensity < 650 )); then char='+';
-      else char='*'; fi
+      (( age < 0 )) && age=0
+      intensity=${stars_twinkle_curve[age]} white=$intensity char=${stars_twinkle_glyph[age]}
     elif [[ ${stars_replacement_birth[cell]+present} ]]; then
       age=$((elapsed - stars_replacement_birth[cell]))
       (( age < 0 )) && age=0
-      ez_stars_ease "$((age * 1000 / 500))"
       # Fade only intensity: preserve the chosen glyph, hue and saturation.
       # A crossing shimmer can still apply its usual color/bold treatment.
-      intensity=$stars_eased
+      intensity=${stars_replacement_curve[age]}
     fi
-    if (( sweeping )); then
-      stars_white=0 color_cycle=$expected
-      if (( local_phase >= 0 && local_phase < stars_rise + stars_tail )); then
-        stars_white=${stars_flash[local_phase]}
-        (( local_phase < stars_rise )) && color_cycle=$((cycle - 1))
-      fi
-      (( stars_white >= 900 )) && style=1
-      sweep_white=$stars_white
-      # A crossing shimmer can desaturate a twinkle, but its own slow fade still
-      # controls intensity and lifetime. There is no abrupt hue flip or cutoff.
-      white=$((1000 - (1000 - white) * (1000 - stars_white) / 1000))
-    fi
-    stars_settled[cell]=-1
-    (( ! sweeping || local_phase < 0 || local_phase >= stars_rise + stars_tail )) && stars_settled[cell]=$expected
+    # Batch integer work to avoid dispatching shell commands for each scalar.
+    # The shimmer changes saturation, while each star's own fade owns intensity.
+    (( stars_white = active_flash ? stars_flash[local_phase] : 0,
+       color_cycle = cycle - (sweeping && local_phase < stars_rise),
+       style = stars_white >= 900, sweep_white = stars_white,
+       white = 1000 - (1000 - white) * (1000 - stars_white) / 1000,
+       stars_settled[cell] = active_flash ? -1 : expected, 1 ))
     if [[ ${stars_cached_target[cell]:--1} == "$color_cycle" ]]; then
       value=${stars_cached_next[cell]}
     elif (( ${stars_cached_target[cell]:--1} == color_cycle + 1 )); then
@@ -696,15 +700,16 @@ function ez_stars_tick() {
         value=${stars_rgb_cache[$rgb_key]}
       fi
     fi
-    fade=${stars_fade[row]}
+    (( row = cell / COLUMNS + 1, fade = stars_fade[row], 1 ))
     # Keep ordinary/twinkle colors intact. Only the sweep's white endpoint uses
     # the deeper full-height fade; never exceed the row's existing white peak.
     peak=${stars_peak[row]:-$((fade * 10))}
-    (( peak > fade * 10 )) && peak=$((fade * 10))
-    peak=$((fade * 10 - (fade * 10 - peak) * sweep_white / 1000))
-    (( stars_r = ((value >> 16) * (1000 - white) * fade * 10 + 255 * white * peak) * intensity / 1000000000,
-       stars_g = (((value >> 8) & 255) * (1000 - white) * fade * 10 + 255 * white * peak) * intensity / 1000000000,
-       stars_b = ((value & 255) * (1000 - white) * fade * 10 + 255 * white * peak) * intensity / 1000000000, 1 ))
+    (( peak = peak > fade * 10 ? fade * 10 : peak,
+       peak = fade * 10 - (fade * 10 - peak) * sweep_white / 1000,
+       color_weight = (1000 - white) * fade * 10, white_value = 255 * white * peak,
+       stars_r = ((value >> 16) * color_weight + white_value) * intensity / 1000000000,
+       stars_g = (((value >> 8) & 255) * color_weight + white_value) * intensity / 1000000000,
+       stars_b = ((value & 255) * color_weight + white_value) * intensity / 1000000000, 1 ))
     token="$stars_r;$stars_g;$stars_b:$style:$char"
     if [[ ${stars_seen[$cell]-} != "$token" ]]; then
       updates[cell]=$token stars_seen[$cell]=$token
@@ -713,25 +718,22 @@ function ez_stars_tick() {
   done
   for cell in "${work_text[@]}"; do
     if (( stable )) && [[ ${stars_text_seen[$cell]+present} ]]; then continue; fi
-    row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
     arrival=${stars_arrival_cell[cell]-}
     if [[ -z $arrival ]]; then
+      (( row = cell / COLUMNS + 1, col = cell % COLUMNS, 1 ))
       distance=$(((col * 1000 / (COLUMNS > 1 ? COLUMNS - 1 : 1) + (row - stars_top) * 1000 / (bottom > stars_top ? bottom - stars_top : 1)) / 2))
       arrival=${stars_sweep_arrival[distance]} stars_arrival_cell[cell]=$arrival
     fi
-    local_phase=$((phase - arrival)) expected=$cycle
-    (( sweeping && local_phase < 0 )) && expected=$((cycle - 1))
+    (( local_phase = phase - arrival,
+       expected = cycle - (sweeping && local_phase < 0),
+       active_flash = sweeping && local_phase >= 0 && local_phase < flash_duration, 1 ))
     if [[ ${stars_text_seen[$cell]+present} ]] &&
-       (( ! sweeping || local_phase < 0 || local_phase >= stars_rise + stars_tail )); then
+       (( ! active_flash )); then
       [[ ${stars_text_settled[cell]:--1} == "$expected" ]] && continue
     fi
-    stars_white=0 color_cycle=$expected
-    if (( sweeping && local_phase >= 0 && local_phase < stars_rise + stars_tail )); then
-      stars_white=${stars_flash[local_phase]}
-      (( local_phase < stars_rise )) && color_cycle=$((cycle - 1))
-    fi
-    stars_text_settled[cell]=-1
-    (( ! sweeping || local_phase < 0 || local_phase >= stars_rise + stars_tail )) && stars_text_settled[cell]=$expected
+    (( stars_white = active_flash ? stars_flash[local_phase] : 0,
+       color_cycle = cycle - (sweeping && local_phase < stars_rise),
+       stars_text_settled[cell] = active_flash ? -1 : expected, 1 ))
     style=${stars_text_style[$cell]}
     if [[ ${stars_text_flash[$cell]:-0} == 1 ]] && (( stars_white >= 900 )); then style=1; fi
     palette=${stars_text_palette[$cell]} rgb_key="$palette:$color_cycle:${stars_sat[palette]}:0"
@@ -741,9 +743,10 @@ function ez_stars_tick() {
       value=${stars_rgb_cache[$rgb_key]}
     fi
     fade=${stars_text_fade[$cell]}
-    (( stars_r = ((value >> 16) * (1000 - stars_white) + 255 * stars_white) * fade / 100000,
-       stars_g = (((value >> 8) & 255) * (1000 - stars_white) + 255 * stars_white) * fade / 100000,
-       stars_b = ((value & 255) * (1000 - stars_white) + 255 * stars_white) * fade / 100000, 1 ))
+    (( color_weight = 1000 - stars_white, white_value = 255 * stars_white,
+       stars_r = ((value >> 16) * color_weight + white_value) * fade / 100000,
+       stars_g = (((value >> 8) & 255) * color_weight + white_value) * fade / 100000,
+       stars_b = ((value & 255) * color_weight + white_value) * fade / 100000, 1 ))
     token="$stars_r;$stars_g;$stars_b:$style:${stars_text_char[$cell]}"
     if [[ ${stars_text_seen[$cell]-} != "$token" ]]; then
       updates[cell]=$token stars_text_seen[$cell]=$token
@@ -762,35 +765,36 @@ function ez_stars_tick() {
 # Indexed arrays enumerate in cell order: no sort process, fewer cursor moves,
 # and one color/style command for each run instead of for every character.
 function ez_stars_emit() {
-  local cell row col token rgb style char active_rgb='' active_style=-1 last_row=-1 next_col=0
+  local cell row col token rgb style char sgr active_rgb='' active_style=-1 row_end=0 next_cell=0
   for cell in "${!updates[@]}"; do
-    row=$((cell / COLUMNS + 1)) col=$((cell % COLUMNS))
-    if (( row != last_row )); then
-      stars_output+=$'\033['"$row;$((col + 1))H"
-    elif (( col != next_col )); then
-      if (( col == next_col + 1 )); then stars_output+=$'\033[C';
+    if (( cell >= row_end )); then
+      (( row = cell / COLUMNS + 1, col = cell % COLUMNS + 1, row_end = row * COLUMNS, 1 ))
+      stars_output+=$'\033['"$row;${col}H"
+    elif (( cell != next_cell )); then
+      if (( cell == next_cell + 1 )); then stars_output+=$'\033[C';
       else
-        stars_output+=$'\033['"$((col - next_col))C"
+        stars_output+=$'\033['"$((cell - next_cell))C"
       fi
     fi
-    last_row=$row next_col=$((col + 1))
+    next_cell=$((cell + 1)) sgr=''
     token=${updates[cell]} rgb=${token%%:*} token=${token#*:}
     style=${token%%:*} char=${token#*:}
     if (( style != active_style )); then
-      if (( active_style < 0 )); then stars_output+=$'\033[0;'"${style}m";
+      if (( active_style < 0 )); then sgr="0;$style";
       else
         case $active_style in
-          1) stars_output+=$'\033[22m' ;;
-          9) stars_output+=$'\033[29m' ;;
+          1) sgr=22 ;;
+          9) sgr=29 ;;
         esac
-        (( style )) && stars_output+=$'\033['"${style}m"
+        (( style )) && sgr+="${sgr:+;}$style"
       fi
       active_style=$style
     fi
     if [[ -n $rgb && $rgb != "$active_rgb" ]]; then
-      stars_output+=$'\033[38;2;'"${rgb}m" active_rgb=$rgb
+      sgr+="${sgr:+;}38;2;$rgb" active_rgb=$rgb
     fi
-    stars_output+=$char
+    if [[ -n $sgr ]]; then stars_output+=$'\033['"${sgr}m$char";
+    else stars_output+=$char; fi
   done
   [[ -z $stars_output ]] || stars_output+=$'\033[0m'
   return 0

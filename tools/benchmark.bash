@@ -26,7 +26,7 @@ declare -A stars_hue_offset stars_cell_render stars_text_palette
 ez_stars_init
 ez_stars_layout "${#fitted_rows[@]}" 5 "${#title_rows[0]}" 2 "$total"
 ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 0 1 "${labels[@]}"
-[[ -n ${4:-} ]] || ez_stars_build_work
+[[ -n ${4:-} && ${BENCH_REFERENCE_CACHE:-0} != 1 ]] || ez_stars_build_work
 [[ -z ${BENCH_CAPTURE:-} ]] || exec 3>"$BENCH_CAPTURE"
 printf 'elapsed_ms,render_us,bytes\n'
 first=0 selected=1
@@ -41,17 +41,18 @@ for ((elapsed = 0; elapsed < 12000; elapsed += 50)); do
           read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
           ez_stars_layout "${#fitted_rows[@]}" 5 "${#title_rows[0]}" 2 "$total"
         fi
-        if [[ -z ${4:-} ]] && (( elapsed == 2450 )); then
+        if [[ -z ${4:-} || ${BENCH_REFERENCE_CACHE:-0} == 1 ]] && (( elapsed == 2450 )); then
           ez_stars_select "$first" "$selected" "${#fitted_rows[@]}"
         else
           ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 "$first" "$selected" "${labels[@]}"
-          [[ -n ${4:-} ]] || ez_stars_build_work
+          [[ -n ${4:-} && ${BENCH_REFERENCE_CACHE:-0} != 1 ]] || ez_stars_build_work
         fi
         ;;
     esac
   fi
   instant=$elapsed
-  [[ ${BENCH_SCENARIO:-0} != 1 ]] || (( elapsed < 9000 )) || instant=$((elapsed + 9000))
+  [[ ${BENCH_JITTER:-0} != 1 ]] || instant=$((instant + (elapsed / 50 % 4) * 7))
+  [[ ${BENCH_SCENARIO:-0} != 1 ]] || (( elapsed < 9000 )) || instant=$((instant + 9000))
   started=${EPOCHREALTIME/./}
   ez_stars_tick "$instant"
   ez_stars_bar_color "$instant"

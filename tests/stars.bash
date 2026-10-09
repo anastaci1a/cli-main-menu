@@ -246,6 +246,30 @@ printf 'PASS complementary circle markers, shared sweep, scrolling, and disabled
 )
 printf 'PASS resume suffix follows the marker palette with lower idle brightness\n'
 
+# The account accent stays on the row while the selected-only duration changes.
+(
+  COLUMNS=80 LINES=24 visible=2 menu_back_focused=0
+  original_labels=('Alpha [personal]' Other)
+  labels=('Alpha [personal] (0:05)' Other)
+  menu_layout_labels=("${original_labels[@]}")
+  menu_enabled=(1 1) menu_disabled_notes=()
+  menu_accent_suffix=([0]=' [personal]') menu_gray_suffix=([0]=' (0:05)')
+  hint_rows=('Enter: Select') title_rows=()
+  ez_stars_init
+  ez_stars_layout 1 0 "$COLUMNS" 0 2 0 "${menu_layout_labels[@]}"
+  ez_stars_text_layout 1 "$COLUMNS" 0 0 0 0 "${labels[@]}"
+  marker_cell=$((3*COLUMNS+option_left))
+  account_cell=$((marker_cell+2+6))
+  timer_cell=$((marker_cell+2+${#original_labels[0]}+2))
+  [[ ${stars_text_palette[$account_cell]} == 3 && ${stars_text_fade[$account_cell]} == 100 ]]
+  [[ ! ${stars_text_char[$timer_cell]+present} && ${stars_occluded[$timer_cell]+present} ]]
+  labels[0]=${original_labels[0]}
+  menu_gray_suffix=()
+  ez_stars_text_layout 1 "$COLUMNS" 0 0 0 1 "${labels[@]}"
+  [[ ${stars_text_char[$account_cell]} == '[' && ${stars_text_fade[$account_cell]} == 60 ]]
+)
+printf 'PASS persistent account accent survives duration removal and dims off selection\n'
+
 # Markers stay one column wide as the option count grows, including in C locale.
 (
   COLUMNS=80 menu_enabled=() menu_disabled_notes=()

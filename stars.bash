@@ -286,7 +286,7 @@ function ez_stars_text_layout() {
   local -a old_cells=("${!stars_text_char[@]}")
   local -a old_occluded=("${!stars_occluded[@]}") labels=("${@:7}")
   local -A old_text_fade=() old_text_palette=()
-  local label note label_width row_label_width marker_width block_width indent right_width accent_suffix accent_start gray_suffix
+  local label base_label note label_width row_label_width marker_width block_width indent right_width accent_suffix accent_start gray_suffix
   for cell in "${old_cells[@]}"; do
     old_text_fade[$cell]=${stars_text_fade[$cell]-}
     old_text_palette[$cell]=${stars_text_palette[$cell]-}
@@ -354,6 +354,7 @@ function ez_stars_text_layout() {
       label+=" $note"
     fi
     gray_suffix=${menu_gray_suffix[index]-}
+    base_label=${original_labels[index]-${labels[index]}}
     row_label_width=$label_width
     if [[ -n $gray_suffix || -n ${menu_accent_suffix[index]-} ]]; then
       row_label_width=$(( COLUMNS - option_left - 3 ))
@@ -361,7 +362,7 @@ function ez_stars_text_layout() {
     fi
     label=${label:0:row_label_width}
     accent_suffix=${menu_accent_suffix[index]-}
-    accent_start=$(( ${#label} - ${#accent_suffix} ))
+    accent_start=$(( ${#base_label} - ${#accent_suffix} ))
     for ((col = 0; col < ${#label}; col++)); do
       # Struck spaces are foreground too; keep animation from erasing the line.
       if [[ ${label:col:1} == ' ' ]] &&
@@ -370,15 +371,15 @@ function ez_stars_text_layout() {
       stars_occluded[$cell]=1
     done
     if [[ -n $gray_suffix ]]; then
-      accent_start=$(( ${#labels[index]} - ${#gray_suffix} ))
+      accent_start=${#base_label}
       for ((col=accent_start;col<${#label};col++)); do
         cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
         stars_occluded[$cell]=1
       done
     fi
     if [[ -n $accent_suffix ]]; then
-      accent_start=$(( ${#labels[index]} - ${#accent_suffix} ))
-      for ((col=accent_start;col<${#label};col++)); do
+      accent_start=$(( ${#base_label} - ${#accent_suffix} ))
+      for ((col=accent_start;col<${#base_label} && col<${#label};col++)); do
         [[ ${label:col:1} == ' ' ]] && continue
         cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
         stars_text_char[$cell]=${label:col:1} stars_text_style[$cell]=0

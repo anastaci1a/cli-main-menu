@@ -52,7 +52,7 @@ function ez_menu_choose() (
   local -A stars_text_flash stars_occluded
   local -A stars_hue_offset stars_cell_render stars_text_palette
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
-  local -a duration_created=() duration_prefix=() duration_mode=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
+  local -a duration_created=() duration_prefix=() duration_mode=() specified_accent_suffix=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
@@ -77,6 +77,11 @@ function ez_menu_choose() (
         (( $# >= 5 )) && [[ $2 =~ ^[0-9]+$ && $3 =~ ^[0-9]+$ ]] || return 1
         duration_created[$2]=$3 duration_prefix[$2]=$4 duration_mode[$2]=$5
         shift 5
+        ;;
+      --accent-suffix)
+        (( $# >= 3 )) && [[ $2 =~ ^[0-9]+$ ]] || return 1
+        specified_accent_suffix[$2]=$3
+        shift 3
         ;;
       --) shift; break ;;
       *) break ;;
@@ -179,12 +184,15 @@ function ez_menu_choose() (
       changed_durations=()
       responsive_labels=("${original_labels[@]}")
       menu_accent_suffix=() menu_gray_suffix=()
+      for index in "${!specified_accent_suffix[@]}"; do
+        menu_accent_suffix[index]=${specified_accent_suffix[index]}
+      done
       printf -v now '%(%s)T' -1
       for ((index=0; index<count; index++)); do
         if [[ ${duration_created[index]+set} ]] && { [[ ${duration_mode[index]} == always ]] || (( index == selected )); }; then
           live_suffix="${duration_prefix[index]}$(ez_codex_duration "$((now-duration_created[index]))"))"
           responsive_labels[index]+=$live_suffix
-          [[ ${duration_mode[index]} == selected ]] && menu_gray_suffix[index]=$live_suffix
+          menu_gray_suffix[index]=$live_suffix
         fi
         label=${responsive_labels[index]}
         if [[ $label == 'Codex: Resume ('* ]]; then
@@ -376,8 +384,7 @@ function ez_menu_choose() (
           duration_col=$((option_left + 3 + ${#original_labels[index]}))
           duration_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
           duration_color=$C_GRAY
-          if [[ ${duration_mode[index]} == always && $index == "$selected" && $menu_back_focused == 0 ]]; then duration_color=$C_WHITE; fi
-          printf -v duration_output '%s\033[%d;%dH%s%s%s' "$duration_output" "$duration_row" "$duration_col" "$duration_color" "$duration_suffix" "$C_RESET"
+          printf -v duration_output '%s\033[%d;%dH%s%s%s%s' "$duration_output" "$duration_row" "$duration_col" "$C_RESET" "$duration_color" "$duration_suffix" "$C_RESET"
         done
       fi
       printf '%s%s%s%s%s' "$status_output" "$header_output" "$frame" "$stars_output" "$duration_output" >&2

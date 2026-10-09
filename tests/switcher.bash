@@ -45,6 +45,25 @@ source -- "$cli_dir/init.bash"
 if ez_codex_valid_name switcher; then exit 1; fi
 printf 'PASS repeated sourcing starts no switcher or tmux process\n'
 
+if command -v jq >/dev/null 2>&1; then
+  codex-switcher() {
+    [[ $1 == instances ]] || return 99
+    printf '[{"inactive":false,"tmux_session":"codex-Alpha","account":"personal"},{"inactive":false,"tmux_session":"codex-Beta","account":"work"},{"inactive":true,"tmux_session":"codex-Gamma","account":"work"}]\n'
+  }
+  ez_codex_names=(Alpha Beta Gamma)
+  ez_codex_session_accounts
+  [[ ${ez_codex_accounts[*]} == 'personal work unknown' ]]
+  unset -f codex-switcher
+fi
+printf 'PASS session accounts match live switcher instances by tmux name\n'
+
+codex-switcher() {
+  printf '<%s>' "$@" >> "$switcher_log"
+  printf '\n' >> "$switcher_log"
+  [[ $1 == ready ]] || return 99
+  return "$switch_ready"
+}
+
 PATH='/tmp/path with spaces'
 TMUX=''
 unset CODEX_HOME

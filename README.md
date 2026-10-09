@@ -48,7 +48,8 @@ Personal aliases (including `cxr`) and the shell prompt remain in `.bashrc`.
 
 Requires Bash 4+, `date`, `stty`, and `clear`. Codex actions additionally need
 `tmux` and `codex`. The optional account monitor needs `codex-switcher` and
-`tmux` on `PATH`. Job switching requires an interactive shell with job control.
+`tmux` on `PATH`; session account labels also need `jq` to read switcher instance
+data. Job switching requires an interactive shell with job control.
 
 ## Where to customize
 
@@ -231,10 +232,14 @@ goes to stderr; stdout returns the selected zero-based index.
 - New sessions are tmux sessions named `codex-<name>`; the existing `codex`
   session is also recognized and displayed as `codex`. `Codex: Resume (<name>)`
   opens the most recently used one; `Codex: Sessions` lists `[new session]` first,
-  followed by existing sessions. The selected session shows a live uptime in
-  parentheses (starting at `0:00`) to the right of the centered name block, without moving the option
-  column or repainting the star field;
-  its action screen also updates the uptime each second. Each
+  followed by existing sessions. Each row keeps the switcher's account nickname
+  in brackets after its name; the nickname participates in centering and follows
+  the same color fade as the main Resume preview. Sessions outside enrolled
+  account homes show `[external]`, and an unavailable switcher lookup shows
+  `[unknown]`. The selected session shows a live uptime in parentheses (starting
+  at `0:00`) to the right of the centered name and account, without moving the
+  option column or repainting the star field. The session action title also
+  shows its account, and that screen updates the uptime each second. Each
   existing session can be resumed, renamed, or terminated.
   The session's creation time comes from tmux, so no data file is needed.
 - Detach with Ctrl-B, then D. A new or resumed session opened from the Sessions

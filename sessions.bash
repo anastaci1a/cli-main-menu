@@ -36,6 +36,23 @@ ez_codex_scan() {
   done < <(tmux list-sessions -F '#{session_id}|#{session_name}|#{session_created}|#{session_last_attached}|#{@ez_codex_last_used}' 2>/dev/null)
 }
 
+ez_codex_session_accounts() {
+  local instances session account index
+  local -A by_session=()
+  ez_codex_accounts=()
+  if command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    instances=$(codex-switcher instances 2>/dev/null) || instances=''
+    while IFS=$'\t' read -r session account; do
+      [[ -n $session && -n $account ]] && by_session["$session"]=$account
+    done < <(jq -r '.[] | select(.inactive == false) | [.tmux_session, .account] | @tsv' <<< "$instances" 2>/dev/null)
+  fi
+  for ((index=0; index<${#ez_codex_names[@]}; index++)); do
+    session=${ez_codex_names[index]}
+    [[ $session == codex ]] || session=codex-$session
+    ez_codex_accounts[index]=${by_session[$session]:-unknown}
+  done
+}
+
 ez_menu_has_codex() { ez_codex_scan; (( ${#ez_codex_ids[@]} > 0 )); }
 ez_menu_codex_label() {
   ez_codex_scan
@@ -501,8 +518,8 @@ ez_codex_new() {
   ez_codex_attach "$id"
 }
 ez_codex_actions() {
-  local id=$1 name=$2 created=$3 selected replacement
-  selected=$(ez_menu_choose 0 '' --screen-title "$name" --live-duration 0 "$created" ' (active for ' always -- Resume Rename Terminate) || return 0
+  local id=$1 name=$2 created=$3 account=${4:-unknown} selected replacement
+  selected=$(ez_menu_choose 0 '' --screen-title "$name [$account]" --live-duration 0 "$created" ' (active for ' always -- Resume Rename Terminate) || return 0
   case $selected in
     0) ez_codex_attach "$id";;
     1) replacement=$(ez_codex_field 'Session name' "$name" "$id") || return 0
@@ -512,19 +529,22 @@ ez_codex_actions() {
 }
 ez_menu_codex_sessions() {
   local selected=0 index
-  local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank uptime_args
+  local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank ez_codex_accounts uptime_args session_labels
   while :; do
     ez_codex_scan
     (( selected > ${#ez_codex_ids[@]} )) && selected=0
-    uptime_args=()
+    ez_codex_session_accounts
+    uptime_args=() session_labels=()
     for ((index=0;index<${#ez_codex_ids[@]};index++)); do
       uptime_args+=(--live-duration "$((index+1))" "${ez_codex_created[index]}" ' (' selected)
+      uptime_args+=(--accent-suffix "$((index+1))" " [${ez_codex_accounts[index]}]")
+      session_labels+=("${ez_codex_names[index]} [${ez_codex_accounts[index]}]")
     done
-    selected=$(ez_menu_choose "$selected" '' --screen-title 'Codex: Sessions' "${uptime_args[@]}" -- '[new session]' "${ez_codex_names[@]}") || return 0
+    selected=$(ez_menu_choose "$selected" '' --screen-title 'Codex: Sessions' "${uptime_args[@]}" -- '[new session]' "${session_labels[@]}") || return 0
     if (( selected==0 )); then ez_codex_new
     else
       index=$((selected-1))
-      ez_codex_actions "${ez_codex_ids[index]}" "${ez_codex_names[index]}" "${ez_codex_created[index]}"
+      ez_codex_actions "${ez_codex_ids[index]}" "${ez_codex_names[index]}" "${ez_codex_created[index]}" "${ez_codex_accounts[index]}"
     fi
   done
 }

@@ -263,7 +263,7 @@ function ez_menu_draw() {
   # keep measuring their own arguments, even if unrelated outer variables exist.
   local -a cached_geometry=("${marker_width-}" "${label_width-}" "${option_block_width-}" "${option_left-}" "${option_right-}")
   local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
-  local marker_color note note_text accent_suffix gray_suffix suffix prefix_length suffix_color screen_row back_col back_text back_weight back_color
+  local marker_color note note_text accent_suffix gray_suffix prefix_length accent_end base_label screen_row back_col back_text back_weight back_color styled_label
   local label_width marker_width option_block_width indent right_width row_label_width row_right_width hint hint_width=0 page
   local left_stars right_stars
   local -a labels hints
@@ -291,11 +291,12 @@ function ez_menu_draw() {
       note_text=" $note"
     fi
     label=${label:0:row_label_width}
-    suffix=$accent_suffix suffix_color=$C_PINK
-    if [[ -n $gray_suffix ]]; then suffix=$gray_suffix suffix_color=$C_GRAY; fi
-    prefix_length=$(( ${#labels[index]} - ${#suffix} ))
+    base_label=${original_labels[index]-${labels[index]}}
+    accent_end=${#base_label}
+    prefix_length=$((accent_end - ${#accent_suffix}))
     (( prefix_length < 0 )) && prefix_length=0
     (( prefix_length > ${#label} )) && prefix_length=${#label}
+    (( accent_end > ${#label} )) && accent_end=${#label}
     printf -v label_padding '%*s' "$((row_label_width - ${#label} - ${#note_text}))" ''
     marker='○' weight='' marker_weight='' label_color=$C_GRAY marker_color=$C_PINK
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then
@@ -304,16 +305,18 @@ function ez_menu_draw() {
       marker='●' weight=$C_BOLD marker_weight=$C_BOLD label_color=$C_WHITE
     fi
     if (( ${menu_back_focused:-0} && ${menu_enabled[index]:-1} )); then marker_color=$C_DISABLED_NUMBER; label_color=$C_GRAY; fi
-    [[ -n $accent_suffix && ( index != selected || ${menu_back_focused:-0} == 1 ) ]] && suffix_color=$C_DISABLED_NUMBER
+    local accent_color=$C_PINK
+    [[ -n $accent_suffix && ( index != selected || ${menu_back_focused:-0} == 1 ) ]] && accent_color=$C_DISABLED_NUMBER
     screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
     if (( ${ez_stars_animated:-0} )); then
       printf '\r'
       ez_stars_render_span "$screen_row" 0 "$((indent + marker_width + 1))"
       ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1))" "${label:0:prefix_length}" "$label_color" "$weight"
       if [[ -n $accent_suffix ]]; then
-        ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + prefix_length))" "$(( ${#label} - prefix_length ))"
-      elif [[ -n $gray_suffix ]]; then
-        ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + prefix_length))" "${label:prefix_length}" "$suffix_color" ''
+        ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + prefix_length))" "$((accent_end - prefix_length))"
+      fi
+      if [[ -n $gray_suffix ]]; then
+        ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + accent_end))" "${label:accent_end}" "$C_RESET$C_GRAY" ''
       fi
       ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + ${#label}))" "$note_text" "$label_color" ''
       ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + ${#label} + ${#note_text}))" "$(( ${#label_padding} + row_right_width ))"
@@ -332,10 +335,12 @@ function ez_menu_draw() {
     [[ -n $left_stars ]] || printf -v left_stars '%*s' "$indent" ''
     [[ -n $right_stars ]] || printf -v right_stars '%*s' "$right_width" ''
     [[ -n $gray_suffix || -n $accent_suffix ]] && printf -v right_stars '%*s' "$row_right_width" ''
-    [[ -n $suffix ]] || prefix_length=${#label}
-    printf '\r\033[2K%s%s%s%s%s %s%s%s%s%s%s%s%s%s%s\r\n' \
+    styled_label="$label_color$weight${label:0:prefix_length}$C_RESET"
+    [[ -z $accent_suffix ]] || styled_label+="$accent_color${label:prefix_length:accent_end-prefix_length}$C_RESET"
+    [[ -z $gray_suffix ]] || styled_label+="$C_RESET$C_GRAY${label:accent_end}$C_RESET"
+    printf '\r\033[2K%s%s%s%s%s %s%s%s%s%s\r\n' \
       "$left_stars" "$marker_color" "$marker_weight" "$marker" "$C_RESET" \
-      "$label_color" "$weight${label:0:prefix_length}" "$C_RESET" "$suffix_color" "${label:prefix_length}" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding$right_stars"
+      "$styled_label" "$label_color" "$note_text" "$C_RESET" "$label_padding$right_stars"
     if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
       back_col=$((indent >= 3 ? indent - 3 : 0)) back_text='◀—'
       if (( ${menu_back_focused:-0} && indent >= 8 )); then back_col=$((indent - 8)); back_text='◀— Back'; fi

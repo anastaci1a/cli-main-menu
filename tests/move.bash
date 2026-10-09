@@ -43,10 +43,16 @@ tmux() {
           printf '$9|%s|%s|%s|codex\n' "$attached" "$pane_dead" "$live_pid" ;;
         '#{pane_dead}') printf '%s\n' "$pane_dead" ;;
         '#{session_attached}|#{pane_dead}') printf '%s|%s\n' "$attached" "$pane_dead" ;;
+        '#{session_attached}|#{pane_dead}|#{pane_pid}|#{session_name}') printf '%s|%s|%s|codex-Focus\n' "$attached" "$pane_dead" "$live_pid" ;;
         '#{pane_pid}|#{pane_current_command}') printf '%s|codex\n' "$live_pid" ;;
       esac ;;
     list-panes) printf '%%9\n' ;;
-    capture-pane) (( ready_prompt )) && printf '› Ask Codex to do anything\n' || printf 'Working...\n' ;;
+    capture-pane)
+      if (( ready_prompt )); then
+        printf '› Ask Codex to do anything\n'
+        (( ready_prompt == 2 )) && printf 'Esc to interrupt\n'
+      else printf 'Working...\n'; fi
+      return 0 ;;
     has-session) return 1 ;;
     new-session)
       printf '%s\0' "$@" > "$test_root/new-session.args"
@@ -116,6 +122,11 @@ if ez_codex_move_info '$9'; then exit 1; fi
 attached=0
 printf '%s\n' '{"type":"event_msg","payload":{"type":"task_started"}}' >> "$rollout"
 if ez_codex_move_info '$9'; then exit 1; fi
+if ez_codex_session_idle '$9'; then exit 1; fi
+ez_menu_choose() { printf '%s\0' "$@" > "$test_root/active-menu.args"; return 130; }
+ez_codex_actions '$9' Focus 100 work
+mapfile -d '' -t args < "$test_root/active-menu.args"
+[[ " ${args[*]} " == *' --screen-title Focus [work] '* && ${args[*]} != *'Focus*'* ]]
 printf '%s\n' '{"type":"event_msg","payload":{"type":"task_complete"}}' >> "$rollout"
 ez_codex_move_info '$9'
 printf 'PASS live Move requires a detached pane with a completed turn\n'
@@ -123,6 +134,8 @@ printf 'PASS live Move requires a detached pane with a completed turn\n'
 instance_mode=unknown
 rg() { printf 'unexpected rg dependency\n' >&2; return 127; }
 ez_codex_session_idle '$9'
+ready_prompt=2
+if ez_codex_session_idle '$9'; then exit 1; fi
 ready_prompt=0
 if ez_codex_session_idle '$9'; then exit 1; fi
 ready_prompt=1 attached=1
@@ -194,3 +207,29 @@ codex-switcher() {
 ez_codex_inactive_scan
 [[ ${ez_inactive_ids[0]} == "$thread" && ${ez_inactive_ids[1]} == "$older_thread" ]]
 printf 'PASS inactive conversations sort newest first within their group\n'
+
+status_log=$test_root/status.jsonl
+complete='{"type":"event_msg","payload":{"type":"task_complete"}}'
+started='{"type":"event_msg","payload":{"type":"task_started"}}'
+aborted='{"type":"event_msg","payload":{"type":"turn_aborted"}}'
+irrelevant='{"type":"turn_context","payload":{}}'
+check_completion() {
+  local expected=$1 actual=0
+  shift
+  printf '%s\n' "$@" > "$status_log"
+  ez_codex_rollout_complete "$status_log" && actual=1
+  [[ $actual == "$expected" ]]
+}
+check_completion 1 "$started" "$complete" "$irrelevant"
+check_completion 0 "$complete" "$started" "$irrelevant"
+check_completion 0 "$complete" "$aborted"
+check_completion 1 '{bad record' "$complete"
+check_completion 0 "$complete" '{partial'
+check_completion 0 "$irrelevant"
+: > "$status_log"
+if ez_codex_rollout_complete "$status_log"; then exit 1; fi
+printf '%s\n%s' "$started" "$complete" > "$status_log"
+ez_codex_rollout_complete "$status_log"
+printf '%s\n%s' "$complete" '{partial' > "$status_log"
+if ez_codex_rollout_complete "$status_log"; then exit 1; fi
+printf 'PASS reverse status scan preserves unfinished, aborted, malformed and unterminated records\n'

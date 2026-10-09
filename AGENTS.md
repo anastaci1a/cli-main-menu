@@ -27,6 +27,8 @@ existing function names, and the module split (`init`, `menu`, `select`,
 - Keep inactive conversations visible across switcher accounts; preserve exact
   thread IDs and homes on Start/Move. Never terminate an unfinished turn or
   delete a conversation through the tmux Terminate action.
+- Share switcher discovery only within a menu refresh. Actions must recheck
+  current state; a visible Codex prompt does not override an unfinished rollout.
 - Keep the alternate screen, cursor, focus, and exact terminal-mode cleanup on
   return and signals. Suppress input echo throughout rendering as well as reads.
 

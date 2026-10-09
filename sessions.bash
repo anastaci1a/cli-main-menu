@@ -41,7 +41,8 @@ ez_codex_session_accounts() {
   local -A by_session=()
   ez_codex_accounts=()
   if command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    instances=$(codex-switcher instances 2>/dev/null) || instances=''
+    if (( $# )); then instances=$1
+    else instances=$(codex-switcher instances 2>/dev/null) || instances=''; fi
     while IFS=$'\t' read -r session account; do
       [[ -n $session && -n $account ]] && by_session["$session"]=$account
     done < <(jq -r '.[] | select(.inactive == false) | [.tmux_session, (.display_account // .account // "unknown")] | @tsv' <<< "$instances" 2>/dev/null)
@@ -91,19 +92,22 @@ ez_codex_alias_delete() {
   mv -f -- "$temp" "$file"
 }
 ez_codex_inactive_scan() {
-  local instances item thread cwd account home binary rollout reason name index fields i j temp
-  local -a ez_inactive_rank=()
+  local instances item thread cwd account home binary rollout reason name index i j temp offset
+  local -a ez_inactive_rank=() records=()
   ez_inactive_ids=() ez_inactive_names=() ez_inactive_accounts=() ez_inactive_cwds=()
   ez_inactive_homes=() ez_inactive_binaries=() ez_inactive_rollouts=() ez_inactive_reasons=() ez_inactive_json=()
   command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
-  instances=$(codex-switcher instances 2>/dev/null) || return 0
-  jq -e 'type == "array"' <<< "$instances" >/dev/null 2>&1 || return 0
-  while IFS= read -r item; do
-    mapfile -d '' -t fields < <(jq -jr \
-      '[.thread_id,.cwd,(.display_account // .account // "unknown"),.home,.binary,.rollout,(.block_reason // "")] | .[] | tostring + "\u0000"' <<< "$item")
-    (( ${#fields[@]} == 7 )) || continue
-    thread=${fields[0]} cwd=${fields[1]} account=${fields[2]} home=${fields[3]}
-    binary=${fields[4]} rollout=${fields[5]} reason=${fields[6]}
+  if (( $# )); then instances=$1
+  else instances=$(codex-switcher instances 2>/dev/null) || return 0; fi
+  # Decode all rows together rather than starting jq once per conversation.
+  mapfile -d '' -t records < <(jq -jr '
+    if type == "array" then .[] | select(.inactive == true) |
+      [.thread_id,.cwd,(.display_account // .account // "unknown"),.home,.binary,.rollout,
+       (.block_reason // ""),tojson] | .[] | tostring + "\u0000"
+    else empty end' <<< "$instances" 2>/dev/null)
+  for ((offset=0;offset+7<${#records[@]};offset+=8)); do
+    thread=${records[offset]} cwd=${records[offset+1]} account=${records[offset+2]} home=${records[offset+3]}
+    binary=${records[offset+4]} rollout=${records[offset+5]} reason=${records[offset+6]} item=${records[offset+7]}
     [[ $thread =~ ^[0-9a-fA-F-]{36}$ && $home == /* && -d $home ]] || continue
     name=${cwd##*/}; [[ -n $name ]] || name=/
     if ez_codex_alias_read "$thread"; then name=$REPLY
@@ -113,7 +117,7 @@ ez_codex_inactive_scan() {
     ez_inactive_cwds[index]=$cwd ez_inactive_homes[index]=$home ez_inactive_binaries[index]=$binary
     ez_inactive_rollouts[index]=$rollout ez_inactive_reasons[index]=$reason ez_inactive_json[index]=$item
     ez_inactive_rank[index]=$(stat -c %Y -- "$rollout" 2>/dev/null) || ez_inactive_rank[index]=0
-  done < <(jq -c '.[] | select(.inactive == true)' <<< "$instances")
+  done
   # Saved conversations have no tmux attach timestamp; rollout mtime is their
   # most recent activity, and keeps the same newest-first ordering as tmux.
   for ((i=0;i<${#ez_inactive_ids[@]};i++)); do
@@ -629,23 +633,27 @@ ez_codex_new() {
 # tmux client is not sufficient evidence of idleness: also require a completed
 # rollout and no process owned by the Codex pane.
 ez_codex_move_info() {
-  local id=$1 session instances item pane_state panes events
+  local id=$1 session instances pane_state panes
+  local -a metadata=()
   command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 &&
     command -v pgrep >/dev/null 2>&1 || return 1
   session=$(tmux display-message -p -t "$id" '#{session_name}') || return 1
-  instances=$(codex-switcher instances 2>/dev/null) || return 1
-  item=$(jq -ec --arg session "$session" \
-    '[.[] | select(.inactive == false and .tmux_session == $session and .block_reason == null)] | if length == 1 then .[0] else empty end' \
-    <<< "$instances" 2>/dev/null) || return 1
-  mapfile -d '' -t ez_move_fields < <(jq -jr \
-    '[.pane,.pid,.start_time,.cwd,.thread_id,.rollout,.home,.binary] | .[] | tostring + "\u0000"' <<< "$item")
+  if (( $# >= 2 )); then instances=$2
+  else instances=$(codex-switcher instances 2>/dev/null) || return 1; fi
+  mapfile -d '' -t metadata < <(jq -jr --arg session "$session" '
+    [.[] | select(.inactive == false and .tmux_session == $session and .block_reason == null)] |
+    if length == 1 then .[0] |
+      [.pane,.pid,.start_time,.cwd,.thread_id,.rollout,.home,.binary, .resume_options[]?] |
+      .[] | tostring + "\u0000"
+    else empty end' <<< "$instances" 2>/dev/null)
+  ez_move_fields=("${metadata[@]:0:8}")
+  ez_move_options=("${metadata[@]:8}")
   (( ${#ez_move_fields[@]} == 8 )) || return 1
   [[ ${ez_move_fields[1]} =~ ^[0-9]+$ && ${ez_move_fields[2]} =~ ^[0-9]+$ &&
      ${ez_move_fields[4]} =~ ^[0-9a-fA-F-]{36}$ &&
      ${ez_move_fields[3]} == /* && ${ez_move_fields[5]} == /* &&
      ${ez_move_fields[6]} == /* && -f ${ez_move_fields[5]} &&
      -d ${ez_move_fields[6]} ]] || return 1
-  mapfile -d '' -t ez_move_options < <(jq -jr '.resume_options[] | . + "\u0000"' <<< "$item")
   pane_state=$(tmux display-message -p -t "${ez_move_fields[0]}" \
     '#{session_id}|#{session_attached}|#{pane_dead}|#{pane_pid}|#{pane_current_command}') || return 1
   [[ $pane_state == "$id|0|0|${ez_move_fields[1]}|codex" ]] || return 1
@@ -663,11 +671,33 @@ ez_codex_move_info() {
 }
 
 ez_codex_session_idle() {
+  local state attached_count dead pid session instances
+  local -a fields=()
+  state=$(tmux display-message -p -t "$1" '#{session_attached}|#{pane_dead}|#{pane_pid}|#{session_name}' 2>/dev/null) || return 1
+  IFS='|' read -r attached_count dead pid session <<< "$state"
+  [[ $attached_count == 0 ]] || return 1
+  [[ $dead == 1 ]] && return 0
+  [[ $dead == 0 && $pid =~ ^[0-9]+$ ]] || return 1
+  if (( $# >= 2 )); then instances=$2
+  else instances=$(codex-switcher instances 2>/dev/null) || instances='[]'; fi
+  mapfile -d '' -t fields < <(jq -jr --arg session "$session" '
+    [.[] | select(.inactive == false and .tmux_session == $session)] |
+    if length == 1 then .[0] | [.pid,.rollout] | .[] | tostring + "\u0000" else empty end
+    ' <<< "$instances" 2>/dev/null)
+  if [[ ${fields[0]-} == "$pid" && -n ${fields[1]-} && ${fields[1]} != null ]]; then
+    # An input prompt can remain visible during a running turn. A known
+    # rollout is authoritative: never fall back after an unfinished task.
+    ez_codex_rollout_complete "${fields[1]}" && ez_codex_idle_children "$pid"
+    return
+  fi
+  ez_codex_idle_prompt "$1"
+}
+
+ez_codex_idle_prompt() {
   local state pane process pid command pane_text line
   state=$(tmux display-message -p -t "$1" '#{session_attached}|#{pane_dead}' 2>/dev/null) || return 1
   [[ $state == '0|1' ]] && return 0
   [[ $state == '0|0' ]] || return 1
-  ez_codex_move_info "$1" && return 0
   # Codex Switcher cannot always match a fresh CLI pane to its rollout. A
   # detached pane at Codex's visible input prompt is still idle for display;
   # Move keeps requiring the stronger verified-thread check above.
@@ -678,6 +708,7 @@ ez_codex_session_idle() {
   [[ $pid =~ ^[0-9]+$ && $command == codex ]] || return 1
   ez_codex_idle_children "$pid" || return 1
   pane_text=$(tmux capture-pane -p -t "$pane" 2>/dev/null) || return 1
+  [[ ${pane_text,,} != *'esc to interrupt'* ]] || return 1
   while IFS= read -r line; do
     [[ $line == '› '* ]] && return 0
   done <<< "$pane_text"
@@ -685,16 +716,29 @@ ez_codex_session_idle() {
 }
 
 ez_codex_rollout_complete() {
-  local events
-  # Older rollouts may contain an invalid record from an interrupted write.
-  # A later task_complete is decisive; an invalid final record is not.
-  events=$(jq -Rr '
-    try fromjson catch {type:"invalid"} |
+  local events last_byte status_filter
+  # Search backward and stop at the newest task status or malformed record.
+  # This preserves the conservative check without parsing the whole history.
+  # Process substitution lets jq stop early without a tac SIGPIPE failing a
+  # caller that has pipefail enabled. Missing/unreadable logs fail closed.
+  [[ -r $1 ]] || return 1
+  # Materialize each parse result before first() exits; otherwise jq 1.6's
+  # catch can mistake that early exit for a malformed record.
+  status_filter='
+    [(try fromjson catch {type:"invalid"})][0] |
     if .type == "invalid" then "invalid"
     elif .type == "event_msg" then
       .payload.type | select(. == "task_started" or . == "task_complete" or . == "turn_aborted")
-    else empty end' "$1" 2>/dev/null) || return 1
-  [[ ${events##*$'\n'} == task_complete ]]
+    else empty end'
+  last_byte=$(tail -c 1 -- "$1" 2>/dev/null) || return 1
+  if [[ -n $last_byte ]]; then
+    # tac joins records when the final newline is missing. Preserve the
+    # forward-parser behavior for that uncommon partial-write case.
+    events=$(jq -Rnr "last(inputs | $status_filter) // \"\"" "$1" 2>/dev/null) || return 1
+  else
+    events=$(jq -Rnr "first(inputs | $status_filter) // \"\"" < <(tac -- "$1" 2>/dev/null) 2>/dev/null) || return 1
+  fi
+  [[ $events == task_complete ]]
 }
 
 # A resumed conversation should use its last recorded permissions. The
@@ -1140,11 +1184,16 @@ ez_codex_terminate() {
 }
 
 ez_codex_actions() {
-  local id=$1 name=$2 created=$3 account=${4:-unknown} selected replacement title
+  local id=$1 name=$2 created=$3 account=${4:-unknown} selected replacement title instances
   local -a move_args=()
   title="$name [$account]"
-  ez_codex_session_idle "$id" && title="$name* [$account]"
-  ez_codex_move_info "$id" || move_args=(--disabled '2 3' --disabled-note 2 '(active or unavailable)' --disabled-note 3 '(active or unavailable)')
+  instances=$(codex-switcher instances 2>/dev/null) || instances='[]'
+  if ez_codex_move_info "$id" "$instances"; then
+    title="$name* [$account]"
+  else
+    move_args=(--disabled '2 3' --disabled-note 2 '(active or unavailable)' --disabled-note 3 '(active or unavailable)')
+    ez_codex_session_idle "$id" "$instances" && title="$name* [$account]"
+  fi
   selected=$(ez_menu_choose 0 '' --screen-title "$title" --live-duration 0 "$created" ' (active for ' always "${move_args[@]}" -- Resume Rename Move Terminate) || return 0
   case $selected in
     0) ez_codex_attach "$id";;
@@ -1156,17 +1205,19 @@ ez_codex_actions() {
 }
 ez_menu_codex_sessions() {
   local selected=0 index position live_count chosen selected_key='' thread name account_pad account_column=0
-  local account account_width=0
+  local account account_width=0 instances
   local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank ez_codex_accounts uptime_args session_labels
   local -a ez_inactive_ids ez_inactive_names ez_inactive_accounts ez_inactive_cwds ez_inactive_homes
   local -a ez_inactive_binaries ez_inactive_rollouts ez_inactive_reasons ez_inactive_json
   local -a live_order=() live_idle=() running_order=() idle_order=()
   while :; do
     ez_codex_scan
+    # One short-lived snapshot per list refresh; action handlers fetch anew.
+    instances=$(codex-switcher instances 2>/dev/null) || instances='[]'
     live_count=${#ez_codex_ids[@]}
     running_order=() idle_order=() live_idle=()
     for ((index=0;index<live_count;index++)); do
-      if ez_codex_session_idle "${ez_codex_ids[index]}"; then
+      if ez_codex_session_idle "${ez_codex_ids[index]}" "$instances"; then
         live_idle[index]=1
         idle_order+=("$index")
       else
@@ -1175,7 +1226,7 @@ ez_menu_codex_sessions() {
       fi
     done
     live_order=("${running_order[@]}" "${idle_order[@]}")
-    ez_codex_inactive_scan
+    ez_codex_inactive_scan "$instances"
     if [[ -n $selected_key ]]; then
       selected=0
       if [[ $selected_key == t:* ]]; then
@@ -1194,7 +1245,7 @@ ez_menu_codex_sessions() {
       fi
     fi
     (( selected > live_count + ${#ez_inactive_ids[@]} )) && selected=0
-    ez_codex_session_accounts
+    ez_codex_session_accounts "$instances"
     account_column=0
     for ((position=0;position<live_count;position++)); do
       index=${live_order[position]}

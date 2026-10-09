@@ -9,7 +9,7 @@ function ez_menu_define_items() {
   else
     menu_items+=('Codex: New Session|ez_codex_new|stay')
   fi
-  menu_items+=('Codex Switcher: Dashboard|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
+  menu_items+=('Codex: Account Switcher|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
   menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
 }
 

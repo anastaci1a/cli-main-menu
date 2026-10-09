@@ -5,6 +5,7 @@ cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 test_root=$(mktemp -d /tmp/satellite-session-focus.XXXXXX)
 trap 'rm -rf -- "$test_root"' EXIT
 source -- "$cli_dir/init.bash"
+codex-switcher() { printf 'query\n' >> "$test_root/discovery-calls"; printf '[]\n'; }
 
 ez_codex_scan() {
   case $scenario:$state in
@@ -52,6 +53,9 @@ for scenario in existing new gone; do
   choice_file=$test_root/$scenario.choice
   printf '0\n' > "$choice_file"
   ez_menu_codex_sessions
+  mapfile -t discovery_calls < "$test_root/discovery-calls"
+  [[ ${#discovery_calls[@]} == 2 ]]
+  : > "$test_root/discovery-calls"
   mapfile -t selections < "$selection_file"
   case $scenario in
     existing)

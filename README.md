@@ -23,8 +23,8 @@ startup
 Sourcing the file only defines commands; it does not open the menu. Bash 4+,
 `date`, `stty`, and `clear` are required. Codex sessions need `tmux` and `codex`.
 The dashboard and saved-conversation list need `codex-switcher`; `jq` enables
-their account labels and Move actions. Moving a folder across filesystems also
-needs `rsync`.
+their account labels and Move actions. Status checks use `tac`; moving a folder
+across filesystems also needs `rsync`.
 
 ## Use the menu
 
@@ -52,7 +52,7 @@ available on each screen.
   under its original account. A running turn, attached tmux session, or active
   child process disables Move. Cross-filesystem moves check free space and show
   copy progress.
-- **Codex Switcher: Dashboard** opens account monitoring and manual moves. New
+- **Codex: Account Switcher** opens account monitoring and manual moves. New
   sessions launched here run Codex using your current configuration; the
   dashboard does not choose their account.
 - **Jobs** manages stopped jobs from this shell. It is unavailable when none

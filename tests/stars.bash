@@ -213,6 +213,39 @@ ez_stars_text_layout 6 15 2 1 9 11
 [[ ${#stars_text_char[@]} -gt 8 ]]
 printf 'PASS complementary circle markers, shared sweep, scrolling, and disabled/selected styles\n'
 
+# The resume suffix shares the marker palette but is dimmer off selection.
+(
+  COLUMNS=80 LINES=24 visible=2 menu_back_focused=0
+  labels=('Codex: Resume (codex)' Other)
+  menu_enabled=(1 1) menu_disabled_notes=() menu_accent_suffix=([0]=' (codex)')
+  hint_rows=('Enter: Select') title_rows=()
+  read -r marker_width label_width block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
+  ez_stars_init
+  ez_stars_layout 1 0 "$COLUMNS" 0 2 0 "${labels[@]}"
+  ez_stars_text_layout 1 "$COLUMNS" 0 0 0 0 "${labels[@]}"
+  marker_cell=$((3*COLUMNS+option_left))
+  suffix_cell=$((marker_cell+3+${#labels[0]}-${#menu_accent_suffix[0]}))
+  [[ ${stars_text_fade[$marker_cell]} == 100 && ${stars_text_fade[$suffix_cell]} == 100 ]]
+  ez_stars_build_work
+  stars_next=999999
+  ez_stars_tick 3999
+  [[ ${stars_text_seen[$marker_cell]%:*:*} == "${stars_text_seen[$suffix_cell]%:*:*}" ]]
+  ez_stars_text_layout 1 "$COLUMNS" 0 0 0 1 "${labels[@]}"
+  [[ ${stars_text_fade[$suffix_cell]} == 60 ]]
+  ez_stars_build_work
+  ez_stars_tick 3999
+  selected_rgb=${stars_text_seen[$marker_cell]%:*:*}
+  read -r selected_red selected_green selected_blue <<< "${selected_rgb//;/ }"
+  idle_rgb=${stars_text_seen[$suffix_cell]%:*:*}
+  read -r idle_red idle_green idle_blue <<< "${idle_rgb//;/ }"
+  (( idle_red < selected_red && idle_green < selected_green && idle_blue < selected_blue ))
+  ez_stars_text_layout 1 "$COLUMNS" 0 0 0 0 "${labels[@]}"
+  ez_stars_build_work
+  ez_stars_tick 3999
+  [[ ${stars_text_seen[$marker_cell]%:*:*} == "${stars_text_seen[$suffix_cell]%:*:*}" ]]
+)
+printf 'PASS resume suffix follows the marker palette with lower idle brightness\n'
+
 # Markers stay one column wide as the option count grows, including in C locale.
 (
   COLUMNS=80 menu_enabled=() menu_disabled_notes=()
@@ -254,8 +287,13 @@ ez_stars_color 4 0 0 55 1000
 from_r=$stars_r from_g=$stars_g from_b=$stars_b
 ez_stars_color 4 1 0 55 1000
 to_r=$stars_r to_g=$stars_g to_b=$stars_b
+ez_stars_color 4 0 0 55 1000 "${stars_sat[4]}" "-$stars_accent_offset"
+sub_from_r=$stars_r sub_from_g=$stars_g sub_from_b=$stars_b
+ez_stars_color 4 1 0 55 1000 "${stars_sat[4]}" "-$stars_accent_offset"
+sub_to_r=$stars_r sub_to_g=$stars_g sub_to_b=$stars_b
 ez_stars_bar_color 4000
 [[ $stars_r == "$from_r" && $stars_g == "$from_g" && $stars_b == "$from_b" ]]
+[[ $stars_sub_bar_bg == $'\033[48;2;'"$sub_from_r;$sub_from_g;${sub_from_b}m" ]]
 ez_stars_bar_color 4250
 (( stars_r == from_r + (to_r - from_r) * 97 / 1000 ))
 (( stars_g == from_g + (to_g - from_g) * 97 / 1000 ))
@@ -264,12 +302,14 @@ ez_stars_bar_color 4500
 (( stars_r == from_r + (to_r - from_r) / 2 ))
 (( stars_g == from_g + (to_g - from_g) / 2 ))
 (( stars_b == from_b + (to_b - from_b) / 2 ))
+[[ $stars_sub_bar_bg == $'\033[48;2;'"$((sub_from_r + (sub_to_r - sub_from_r) / 2));$((sub_from_g + (sub_to_g - sub_from_g) / 2));$((sub_from_b + (sub_to_b - sub_from_b) / 2))m" ]]
 ez_stars_bar_color 4750
 (( stars_r == from_r + (to_r - from_r) * 902 / 1000 ))
 (( stars_g == from_g + (to_g - from_g) * 902 / 1000 ))
 (( stars_b == from_b + (to_b - from_b) * 902 / 1000 ))
 ez_stars_bar_color 5000
 [[ $stars_r == "$to_r" && $stars_g == "$to_g" && $stars_b == "$to_b" ]]
+[[ $stars_sub_bar_bg == $'\033[48;2;'"$sub_to_r;$sub_to_g;${sub_to_b}m" ]]
 settled_bg=$stars_bar_bg
 ez_stars_bar_color 7000
 [[ $stars_bar_bg == "$settled_bg" ]]

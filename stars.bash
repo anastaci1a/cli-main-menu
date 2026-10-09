@@ -223,9 +223,19 @@ function ez_stars_layout() {
 }
 
 function ez_stars_baseline_mask() {
-  local banner_count=$1 first=$2 width=$3 index row col cell label note
+  local banner_count=$1 first=$2 width=$3 index row col cell label note back_col back_end
   local -a labels=("${@:4}")
   stars_baseline_blocked=()
+  if (( ${menu_has_back:-0} && option_left > 0 )); then
+    row=$((banner_count + 3))
+    back_col=$((option_left >= 8 ? option_left - 8 : 0))
+    back_end=$((back_col + 7))
+    (( back_end > option_left )) && back_end=$option_left
+    for ((col=back_col;col<back_end;col++)); do
+      cell=$(((row - 1) * COLUMNS + col))
+      stars_baseline_blocked[$cell]=1
+    done
+  fi
   for ((index = first; index < first + visible && index < ${#labels[@]}; index++)); do
     row=$((banner_count + 3 + index - first))
     (( row >= LINES )) && break
@@ -275,10 +285,20 @@ function ez_stars_text_layout() {
   local -a letters=("${title_rows[@]}")
   local -a old_cells=("${!stars_text_char[@]}")
   local -a old_occluded=("${!stars_occluded[@]}") labels=("${@:7}")
-  local label note label_width marker_width block_width indent right_width
+  local -A old_text_fade=() old_text_palette=()
+  local label note label_width row_label_width marker_width block_width indent right_width accent_suffix accent_start gray_suffix
+  for cell in "${old_cells[@]}"; do
+    old_text_fade[$cell]=${stars_text_fade[$cell]-}
+    old_text_palette[$cell]=${stars_text_palette[$cell]-}
+  done
   stars_occluded=()
-  read -r marker_width label_width block_width indent right_width < <(ez_menu_option_layout "${labels[@]}")
-  ez_stars_baseline_mask "$banner_count" "$first" "$label_width" "${labels[@]}"
+  if (( ${#menu_layout_labels[@]} )); then
+    read -r marker_width label_width block_width indent right_width < <(ez_menu_option_layout "${menu_layout_labels[@]}")
+    ez_stars_baseline_mask "$banner_count" "$first" "$label_width" "${menu_layout_labels[@]}"
+  else
+    read -r marker_width label_width block_width indent right_width < <(ez_menu_option_layout "${labels[@]}")
+    ez_stars_baseline_mask "$banner_count" "$first" "$label_width" "${labels[@]}"
+  fi
   # Scrolling can move a label's spaces over existing baseline stars. Relocate
   # those stars through the same weighted replacement queue, keeping population.
   for cell in "${!stars_baseline_blocked[@]}"; do
@@ -291,6 +311,14 @@ function ez_stars_text_layout() {
     unset 'stars_color_pair[cell]'
   done
   stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
+  if (( ${menu_has_back:-0} && option_left > 0 )); then
+    row=$((banner_count + 3))
+    left=$((option_left >= 8 ? option_left - 8 : 0))
+    for ((col=left;col<left+7 && col<option_left;col++)); do
+      cell=$(((row - 1) * COLUMNS + col))
+      stars_occluded[$cell]=1
+    done
+  fi
   if (( compact )); then
     text=$(ez_menu_title_text)
     letters=("${text:0:COLUMNS}")
@@ -313,10 +341,11 @@ function ez_stars_text_layout() {
     (( row >= LINES )) && break
     style=0 fade=100
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
-    elif (( index == selected )); then style=1; fi
+    elif (( index == selected && ! ${menu_back_focused:-0} )); then style=1; fi
+    (( ${menu_back_focused:-0} )) && fade=60
     # Store each UTF-8 marker as one terminal cell, even in the C locale.
     text='○'
-    (( index == selected )) && text='●'
+    (( index == selected && ! ${menu_back_focused:-0} )) && text='●'
     cell=$(( (row - 1) * COLUMNS + option_left ))
     stars_text_char[$cell]=$text stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
     stars_text_palette[$cell]=3
@@ -324,12 +353,38 @@ function ez_stars_text_layout() {
     if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= label_width )); then
       label+=" $note"
     fi
-    label=${label:0:label_width}
+    gray_suffix=${menu_gray_suffix[index]-}
+    row_label_width=$label_width
+    if [[ -n $gray_suffix || -n ${menu_accent_suffix[index]-} ]]; then
+      row_label_width=$(( COLUMNS - option_left - 3 ))
+      (( row_label_width < 1 )) && row_label_width=1
+    fi
+    label=${label:0:row_label_width}
+    accent_suffix=${menu_accent_suffix[index]-}
+    accent_start=$(( ${#label} - ${#accent_suffix} ))
     for ((col = 0; col < ${#label}; col++)); do
       [[ ${label:col:1} == ' ' ]] && continue
       cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
       stars_occluded[$cell]=1
     done
+    if [[ -n $gray_suffix ]]; then
+      accent_start=$(( ${#labels[index]} - ${#gray_suffix} ))
+      for ((col=accent_start;col<${#label};col++)); do
+        cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
+        stars_occluded[$cell]=1
+      done
+    fi
+    if [[ -n $accent_suffix ]]; then
+      accent_start=$(( ${#labels[index]} - ${#accent_suffix} ))
+      for ((col=accent_start;col<${#label};col++)); do
+        [[ ${label:col:1} == ' ' ]] && continue
+        cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
+        stars_text_char[$cell]=${label:col:1} stars_text_style[$cell]=0
+        stars_text_fade[$cell]=$(( index == selected && ! ${menu_back_focused:-0} ? 100 : 60 ))
+        stars_text_palette[$cell]=3
+        stars_text_flash[$cell]=1
+      done
+    fi
   done
   for text in "${hint_rows[@]}"; do (( ${#text} > hint_width )) && hint_width=${#text}; done
   left=$(( (COLUMNS - hint_width) / 2 ))
@@ -353,7 +408,9 @@ function ez_stars_text_layout() {
     fi
   done
   for cell in "${!stars_text_char[@]}"; do
-    if [[ ${stars_text_seen[$cell]#*:} != "${stars_text_style[$cell]}:${stars_text_char[$cell]}" ]]; then
+    if [[ ${stars_text_seen[$cell]#*:} != "${stars_text_style[$cell]}:${stars_text_char[$cell]}" ||
+          ${old_text_fade[$cell]-} != "${stars_text_fade[$cell]}" ||
+          ${old_text_palette[$cell]-} != "${stars_text_palette[$cell]}" ]]; then
       unset 'stars_text_seen[$cell]' 'stars_text_settled[$cell]'
     fi
   done
@@ -1025,25 +1082,38 @@ function ez_stars_render_sparse_span() {
 
 function ez_stars_bar_color() {
   local elapsed=$1 cycle phase from_red from_green from_blue fraction
+  local sub_from_red sub_from_green sub_from_blue
   cycle=$((elapsed / stars_period)) phase=$((elapsed % stars_period))
   if [[ ${stars_bar_cycle:--1} != "$cycle" ]]; then
     if (( cycle > 0 )); then
       ez_stars_color 4 "$((cycle - 1))" 0 55 1000
       stars_bar_from=$(((stars_r << 16) | (stars_g << 8) | stars_b))
+      ez_stars_color 4 "$((cycle - 1))" 0 55 1000 "${stars_sat[4]}" "-$stars_accent_offset"
+      stars_sub_bar_from=$(((stars_r << 16) | (stars_g << 8) | stars_b))
     fi
     ez_stars_color 4 "$cycle" 0 55 1000
     stars_bar_to=$(((stars_r << 16) | (stars_g << 8) | stars_b)) stars_bar_cycle=$cycle
     printf -v stars_bar_target_bg '\033[48;2;%d;%d;%dm' "$stars_r" "$stars_g" "$stars_b"
+    ez_stars_color 4 "$cycle" 0 55 1000 "${stars_sat[4]}" "-$stars_accent_offset"
+    stars_sub_bar_to=$(((stars_r << 16) | (stars_g << 8) | stars_b))
+    printf -v stars_sub_bar_target_bg '\033[48;2;%d;%d;%dm' "$stars_r" "$stars_g" "$stars_b"
   fi
   if (( cycle > 0 && phase < stars_duration )); then
     ez_stars_sweep_ease "$((phase * 1000 / stars_duration))"
     fraction=$stars_eased
+    (( sub_from_red = stars_sub_bar_from >> 16, sub_from_green = (stars_sub_bar_from >> 8) & 255,
+       sub_from_blue = stars_sub_bar_from & 255,
+       stars_r = sub_from_red + ((stars_sub_bar_to >> 16) - sub_from_red) * fraction / 1000,
+       stars_g = sub_from_green + (((stars_sub_bar_to >> 8) & 255) - sub_from_green) * fraction / 1000,
+       stars_b = sub_from_blue + ((stars_sub_bar_to & 255) - sub_from_blue) * fraction / 1000, 1 ))
+    printf -v stars_sub_bar_bg '\033[48;2;%d;%d;%dm' "$stars_r" "$stars_g" "$stars_b"
     (( from_red = stars_bar_from >> 16, from_green = (stars_bar_from >> 8) & 255, from_blue = stars_bar_from & 255,
        stars_r = from_red + ((stars_bar_to >> 16) - from_red) * fraction / 1000,
        stars_g = from_green + (((stars_bar_to >> 8) & 255) - from_green) * fraction / 1000,
        stars_b = from_blue + ((stars_bar_to & 255) - from_blue) * fraction / 1000, 1 ))
     printf -v stars_bar_bg '\033[48;2;%d;%d;%dm' "$stars_r" "$stars_g" "$stars_b"
   else
+    stars_sub_bar_bg=$stars_sub_bar_target_bg
     (( stars_r = stars_bar_to >> 16, stars_g = (stars_bar_to >> 8) & 255, stars_b = stars_bar_to & 255, 1 ))
     stars_bar_bg=$stars_bar_target_bg
   fi

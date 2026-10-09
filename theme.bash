@@ -6,7 +6,8 @@ C_BOLD=$'\033[1m'
 C_WHITE=$'\033[38;5;255m'
 C_GRAY=$'\033[38;5;250m'
 C_DISABLED=$'\033[38;5;242m'
-C_DISABLED_NUMBER=$'\033[38;5;60m'
+# Normal pink (215, 135, 255) at 60% brightness, preserving its hue.
+C_DISABLED_NUMBER=$'\033[38;2;129;81;153m'
 C_STRIKE=$'\033[9m'
 
 C_PINK=$'\033[38;5;177m'

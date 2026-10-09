@@ -23,6 +23,7 @@ scripts/cli/
   render.bash
   stars.bash
   actions.bash
+  sessions.bash
   select.bash
   menu.bash
 ```
@@ -46,7 +47,8 @@ the menu, attach tmux, or start Codex. Reloading `.bashrc` reloads every module.
 Personal aliases (including `cxr`) and the shell prompt remain in `.bashrc`.
 
 Requires Bash 4+, `date`, `stty`, and `clear`. Codex actions additionally need
-`tmux` and `codex`. Job switching requires an interactive shell with job control.
+`tmux` and `codex`. The optional account monitor needs `codex-switcher` and
+`tmux` on `PATH`. Job switching requires an interactive shell with job control.
 
 ## Where to customize
 
@@ -58,7 +60,8 @@ Requires Bash 4+, `date`, `stty`, and `clear`. Codex actions additionally need
 | `config.bash` | Optional personal title/color overrides; ignored by Git |
 | `font.bash` | Block lettering that adapts to the configured title |
 | `menu.bash` | Main menu entries and action dispatch |
-| `actions.bash` | New Terminal, Codex, and Jobs actions |
+| `actions.bash` | New Terminal, Jobs, and Codex account monitor actions |
+| `sessions.bash` | Codex session manager and directory picker |
 | `render.bash` | Title, status, stars, geometry, and control hints |
 | `stars.bash` | Stateful twinkles, diagonal hue sweeps, and protected text areas |
 | `select.bash` | Arrow keys, disabled options, scrolling, focus, and resize handling |
@@ -151,7 +154,7 @@ During each sweep the full-width status background eases from
 the previous settled hint color to the next, then holds that color.
 
 Clock ticks update the status bar alone; navigation repaints the option area.
-Full repairs on focus, resize, Ctrl-L, and a five-second fallback paint the final
+Full repairs on focus, resize, and a five-second fallback paint the final
 animated cells directly, avoiding blank or original-color underlays that caused
 title flicker. The fallback still repairs terminals that omit focus events.
 
@@ -174,7 +177,7 @@ EZ_MENU_SWEEP_ACCENT_OFFSET=180 # complementary title/marker hue
 Invalid timing values fall back to defaults. Duration is at least 300 ms and the
 interval leaves at least 1800 ms between sweeps. Durations below 600 ms also
 shorten individual flashes to leave room for movement. Non-TTY/numeric
-menus stay static. Animation state survives navigation, focus, and Ctrl-L within
+menus stay static. Animation state survives navigation and focus within
 the selector; opening a new selector starts a fresh field.
 
 ### Menu entries
@@ -203,23 +206,64 @@ goes to stderr; stdout returns the selected zero-based index.
 
 ## Current behavior
 
-- Up/Down moves the selection, Enter selects, Escape leaves, and Ctrl-L redraws.
+- Arrow keys move the selection; Enter selects and Escape leaves. In submenus,
+  Left focuses the `◀— Back` control, then Enter returns or Right restores
+  the options.
 - Exit is the last option and runs `exit` in the current shell.
 - The status bar fills the screen. Hints use 4, 2+2, or 1+1+1+1 layouts.
 - Option rows form a centered, left-aligned block with a fixed arrow slot.
+  The main menu centers `Codex: Resume` without its session-name preview; that
+  preview extends to the right of the block.
 - Stars animate without reshuffling on clock ticks or navigation. Side stars
   keep a clear gutter around the options and fade darker toward the bottom.
-- Codex resumes tmux session `codex` through `cxr`, or validates a starting
-  directory and creates `codex` running
-  `codex --dangerously-bypass-approvals-and-sandbox`.
-- Detach from a Codex session opened through the menu with Ctrl-B, then D, to
-  return to SATELLITE with Resume Codex selected. The session keeps running.
+- With no managed sessions, `Codex: New Session` opens a name and directory
+  picker. Names use letters, digits, spaces, `_+-=~()[]`, and must be unique.
+  `switcher` is reserved for the account monitor's tmux session.
+  The directory picker starts with the current directory, accepts `~`, `$VAR`,
+  and `${VAR}` paths, and browses accessible subdirectories with arrows. An
+  empty path shows no suggestions. `Add new directory` opens a name textbox in
+  the selected directory; if the typed path names a new child, its name is
+  prefilled. The action is unavailable when no writable parent can be resolved.
+  Directory names accept spaces and punctuation, with `/` reserved as a path
+  separator. Left/Right moves the name-field cursor.
+  Enter starts Codex only with valid inputs. Text fields show a white block
+  cursor; empty fields show a gray prompt beneath it.
+- New sessions are tmux sessions named `codex-<name>`; the existing `codex`
+  session is also recognized and displayed as `codex`. `Codex: Resume (<name>)`
+  opens the most recently used one; `Codex: Sessions` lists `[new session]` first,
+  followed by existing sessions. The selected session shows a live uptime in
+  parentheses (starting at `0:00`) to the right of the centered name block, without moving the option
+  column or repainting the star field;
+  its action screen also updates the uptime each second. Each
+  existing session can be resumed, renamed, or terminated.
+  The session's creation time comes from tmux, so no data file is needed.
+- Detach with Ctrl-B, then D. A new or resumed session opened from the Sessions
+  list returns there; the main Resume action returns to the main menu.
+  The existing `cxr` alias continues to attach to the `codex` session.
+- When `codex-switcher` and `tmux` are installed, `Codex: Account Monitor`
+  opens or reuses a dedicated `codex-switcher` tmux session running
+  `codex-switcher ui`. From outside tmux, Ctrl-B then D detaches the dashboard
+  and returns to the menu. From inside tmux, the action switches clients without
+  nesting; Ctrl-B then L switches back to the previous session. Quitting the
+  dashboard leaves its supervisor running. The dashboard is read-only; use
+  `codex-switcher config` commands to change settings. It uses the existing
+  `CODEX_SWITCHER_HOME` when that variable is set.
+- When `codex-switcher ready` fails, the menu shows **Automatic account
+  switching unavailable**. Readiness is checked when the main menu is built,
+  not on animation frames. The enrolled `personal` and `work` accounts can be
+  monitored, but normal Codex launches and resumes stay on their direct path.
+  This integration adds account monitoring access; autonomous switching remains
+  blocked in codex-switcher. Usage percentages are viewed in the dashboard.
+- Submenus and input screens retain the animated star field, sweep, twinkles,
+  status bar, and circle markers. A bold title in a second bar beneath the status
+  bar names each screen; that bar follows the stars' center hue through sweeps.
+  The alternate screen stays active between menu screens.
 - Jobs is disabled when this shell has no stopped jobs. When available, it lists
   running and stopped shell jobs and offers foreground/termination actions.
 - Interactive options use ○, changing to ● in place when selected. The marker
   column stays the same width for any number of options. The non-TTY fallback
   retains numbers for typed selection.
-- Disabled Jobs has a dark purple struck marker and a dark gray struck label;
+- Disabled Jobs has a darker pink struck marker with the normal marker's hue and a dark gray struck label;
   its `(no stopped jobs)` explanation is not struck through.
 - The menu uses an alternate screen and repairs on focus/resize and periodically.
   It restores terminal modes before launching an action or returning to the shell.
@@ -228,6 +272,7 @@ goes to stderr; stdout returns the selected zero-based index.
 
 ```bash
 bash tests/smoke.bash
+bash tests/switcher.bash
 bash tests/stars.bash
 perl tests/terminal.pl
 ```
@@ -237,7 +282,7 @@ alias, and relocation into a path with spaces. An alternate `.bashrc` can be
 provided as its first argument. Deterministic animation checks cover text masks,
 twinkle replacement/lifetime, diagonal timing, hue shifts, and lower-row peaks.
 The terminal checks require Perl `IO::Pty` and
-exercise navigation, resize/focus, Codex arguments, and temporary test jobs.
+exercise navigation, resize/focus, Codex session creation/selection, and temporary test jobs.
 They stub tmux and do not launch Codex or operate on your existing shell jobs.
 Set `EZ_CLI_BASHRC` to test a different `.bashrc` with the terminal suite.
 

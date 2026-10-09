@@ -59,6 +59,21 @@ function ez_menu_banner() {
   printf '\n'
 }
 
+function ez_menu_screen_banner() {
+  local title=$1 blank_rows=${2:-0} width=${COLUMNS:-80} header row
+  (( width < 1 )) && width=1
+  ez_menu_screen_header "$title" "$C_STATUS_BG" header
+  printf '%s\n' "$header"
+  for ((row = 0; row < blank_rows; row++)); do printf '%*s\n' "$width" ''; done
+}
+
+function ez_menu_screen_header() {
+  local title=$1 background=$2 output_name=$3 width=${COLUMNS:-80} text
+  (( width < 1 )) && width=1
+  text=" ${title:0:width-1}"
+  printf -v "$output_name" '%s%s%s%-*s%s' "$background" "$C_WHITE" "$C_BOLD" "$width" "$text" "$C_RESET"
+}
+
 function ez_menu_status_text() {
   local width=${COLUMNS:-80}
   local clock_text host_text=${HOSTNAME%%.*} path_text=$PWD status_text path_width
@@ -108,24 +123,56 @@ function ez_menu_clip() {
 }
 
 function ez_menu_hint_lines() {
-  local width=$(( ${COLUMNS:-80} - 4 )) full first second left_width
-  local -a hints=('Up/Down: move' 'Enter: select' 'Esc: back' 'Ctrl-L: redraw')
-  printf -v full '%s   %s   %s   %s' "${hints[@]}"
-  if (( ${#full} <= width )); then
-    printf '%s\n' "$full"
-    return
+  local context=${1:-submenu} count=${2:-2} valid=${3:-1}
+  local width=$(( ${COLUMNS:-80} - 4 )) line='' hint next first second left_width
+  local -a hints=()
+  (( width < 1 )) && width=1
+  case $context in
+    main|submenu)
+      if [[ $context == main ]]; then
+        (( count > 1 )) && hints+=('▲/▼: Move')
+        hints+=('Enter/Space: Select' 'Esc: Exit')
+      else
+        if (( count > 1 )); then hints+=('▲/▼/◀/▶: Move')
+        else hints+=('◀/▶: Move'); fi
+        hints+=('Enter/Space: Select' 'Esc: Back')
+      fi
+      ;;
+    name)
+      (( valid )) && hints+=('Enter: Accept')
+      hints+=('Esc: Back' 'Ctrl-U: Clear')
+      ;;
+    directory)
+      if (( count > 2 || valid )); then hints+=('▲/▼: Choose'); fi
+      if (( count > 2 )); then hints+=('▶/Tab: Open' '◀: Parent'); fi
+      (( valid || count > 2 )) && hints+=('Enter: Select')
+      hints+=('Esc: Back' 'Ctrl-U: Clear')
+      ;;
+  esac
+  if (( ${#hints[@]} == 4 )); then
+    printf -v next '%s   %s   %s   %s' "${hints[@]}"
+    if (( ${#next} <= width )); then printf '%s\n' "$next"; return; fi
+    left_width=${#hints[0]}
+    (( ${#hints[2]} > left_width )) && left_width=${#hints[2]}
+    printf -v first '%-*s   %s' "$left_width" "${hints[0]}" "${hints[1]}"
+    printf -v second '%-*s   %s' "$left_width" "${hints[2]}" "${hints[3]}"
+    if (( ${#first} <= width && ${#second} <= width )); then
+      printf '%s\n%s\n' "$first" "$second"
+      return
+    fi
   fi
-
-  # Align the second column in the two-row layout.
-  left_width=${#hints[0]}
-  (( ${#hints[2]} > left_width )) && left_width=${#hints[2]}
-  printf -v first '%-*s   %s' "$left_width" "${hints[0]}" "${hints[1]}"
-  printf -v second '%-*s   %s' "$left_width" "${hints[2]}" "${hints[3]}"
-  if (( ${#first} <= width && ${#second} <= width )); then
-    printf '%s\n' "$first" "$second"
-  else
-    printf '%s\n' "${hints[@]}"
-  fi
+  for hint in "${hints[@]}"; do
+    (( ${#hint} > width )) && hint=${hint:0:width}
+    next=$hint
+    [[ -n $line ]] && next="$line   $hint"
+    if [[ -n $line && ${#next} -gt $width ]]; then
+      printf '%s\n' "$line"
+      line=$hint
+    else
+      line=$next
+    fi
+  done
+  [[ -n $line ]] && printf '%s\n' "$line"
 }
 
 function ez_menu_star_palette() {
@@ -212,9 +259,9 @@ function ez_menu_draw() {
   # keep measuring their own arguments, even if unrelated outer variables exist.
   local -a cached_geometry=("${marker_width-}" "${label_width-}" "${option_block_width-}" "${option_left-}" "${option_right-}")
   local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
-  local marker_color note note_text
-  local label_width marker_width option_block_width indent right_width hint hint_width=0 page
-  local left_stars right_stars screen_row
+  local marker_color note note_text accent_suffix gray_suffix suffix prefix_length suffix_color screen_row back_col back_text back_weight back_color
+  local label_width marker_width option_block_width indent right_width row_label_width row_right_width hint hint_width=0 page
+  local left_stars right_stars
   local -a labels hints
   shift 3
   labels=("$@")
@@ -226,37 +273,72 @@ function ez_menu_draw() {
   fi
   for ((index = first; index < first + visible; index++)); do
     label=${labels[index]}
+    accent_suffix=${menu_accent_suffix[index]-} gray_suffix=${menu_gray_suffix[index]-}
+    row_label_width=$label_width row_right_width=$right_width
+    if [[ -n $gray_suffix || -n $accent_suffix ]]; then
+      row_label_width=$(( ${COLUMNS:-80} - indent - marker_width - 2 ))
+      (( row_label_width < 1 )) && row_label_width=1
+      row_right_width=1
+    fi
     note=${menu_disabled_notes[index]-}
     note_text=''
     # Explanations are indivisible: omit them if the complete label won't fit.
-    if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= label_width )); then
+    if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= row_label_width )); then
       note_text=" $note"
     fi
-    label=${label:0:label_width}
-    printf -v label_padding '%*s' "$((label_width - ${#label} - ${#note_text}))" ''
+    label=${label:0:row_label_width}
+    suffix=$accent_suffix suffix_color=$C_PINK
+    if [[ -n $gray_suffix ]]; then suffix=$gray_suffix suffix_color=$C_GRAY; fi
+    prefix_length=$(( ${#labels[index]} - ${#suffix} ))
+    (( prefix_length < 0 )) && prefix_length=0
+    (( prefix_length > ${#label} )) && prefix_length=${#label}
+    printf -v label_padding '%*s' "$((row_label_width - ${#label} - ${#note_text}))" ''
     marker='○' weight='' marker_weight='' label_color=$C_GRAY marker_color=$C_PINK
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then
       weight=$C_STRIKE marker_weight=$C_STRIKE label_color=$C_DISABLED marker_color=$C_DISABLED_NUMBER
-    elif (( index == selected )); then
+    elif (( index == selected && ! ${menu_back_focused:-0} )); then
       marker='●' weight=$C_BOLD marker_weight=$C_BOLD label_color=$C_WHITE
     fi
+    if (( ${menu_back_focused:-0} && ${menu_enabled[index]:-1} )); then marker_color=$C_DISABLED_NUMBER; label_color=$C_GRAY; fi
+    [[ -n $accent_suffix && ( index != selected || ${menu_back_focused:-0} == 1 ) ]] && suffix_color=$C_DISABLED_NUMBER
+    screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
     if (( ${ez_stars_animated:-0} )); then
-      screen_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
       printf '\r'
       ez_stars_render_span "$screen_row" 0 "$((indent + marker_width + 1))"
-      ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1))" "$label" "$label_color" "$weight"
+      ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1))" "${label:0:prefix_length}" "$label_color" "$weight"
+      if [[ -n $accent_suffix ]]; then
+        ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + prefix_length))" "$(( ${#label} - prefix_length ))"
+      elif [[ -n $gray_suffix ]]; then
+        ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + prefix_length))" "${label:prefix_length}" "$suffix_color" ''
+      fi
       ez_menu_overlay_text "$screen_row" "$((indent + marker_width + 1 + ${#label}))" "$note_text" "$label_color" ''
-      ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + ${#label} + ${#note_text}))" "$(( ${#label_padding} + right_width ))"
+      ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + ${#label} + ${#note_text}))" "$(( ${#label_padding} + row_right_width ))"
       printf '\r\n'
+      if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
+        back_col=$((indent >= 3 ? indent - 3 : 0)) back_text='◀—'
+        if (( ${menu_back_focused:-0} && indent >= 8 )); then back_col=$((indent - 8)); back_text='◀— Back'; fi
+        back_weight='' back_color=$C_GRAY
+        if (( ${menu_back_focused:-0} )); then back_weight=$C_BOLD; back_color=$C_WHITE; fi
+        printf '\033[%d;%dH%s%s%s%s\033[%d;1H' "$screen_row" "$((back_col+1))" "$back_color" "$back_weight" "$back_text" "$C_RESET" "$((screen_row+1))"
+      fi
       continue
     fi
     left_stars=${menu_star_left[index-first]-}
     right_stars=${menu_star_right[index-first]-}
     [[ -n $left_stars ]] || printf -v left_stars '%*s' "$indent" ''
     [[ -n $right_stars ]] || printf -v right_stars '%*s' "$right_width" ''
-    printf '\r\033[2K%s%s%s%s%s %s%s%s%s%s%s%s%s\r\n' \
+    [[ -n $gray_suffix || -n $accent_suffix ]] && printf -v right_stars '%*s' "$row_right_width" ''
+    [[ -n $suffix ]] || prefix_length=${#label}
+    printf '\r\033[2K%s%s%s%s%s %s%s%s%s%s%s%s%s%s%s\r\n' \
       "$left_stars" "$marker_color" "$marker_weight" "$marker" "$C_RESET" \
-      "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding" "$right_stars"
+      "$label_color" "$weight${label:0:prefix_length}" "$C_RESET" "$suffix_color" "${label:prefix_length}" "$C_RESET" "$label_color" "$note_text" "$C_RESET" "$label_padding$right_stars"
+    if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
+      back_col=$((indent >= 3 ? indent - 3 : 0)) back_text='◀—'
+      if (( ${menu_back_focused:-0} && indent >= 8 )); then back_col=$((indent - 8)); back_text='◀— Back'; fi
+      back_weight='' back_color=$C_GRAY
+      if (( ${menu_back_focused:-0} )); then back_weight=$C_BOLD; back_color=$C_WHITE; fi
+      printf '\033[%d;%dH%s%s%s%s\033[%d;1H' "$screen_row" "$((back_col+1))" "$back_color" "$back_weight" "$back_text" "$C_RESET" "$((screen_row+1))"
+    fi
   done
   if (( ${ez_stars_animated:-0} )); then
     screen_row=$(( ${#fitted_rows[@]} + visible + 3 ))

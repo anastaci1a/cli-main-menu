@@ -23,7 +23,7 @@
   in the non-TTY fallback, where users need them to choose an option by typing.
 - Keep full-width status/stars, centered title/hints, responsive hint grouping,
   disabled styling, and all-or-nothing disabled explanations.
-- Preserve star animation state across navigation, focus, and Ctrl-L. Recompute
+- Preserve star animation state across navigation and focus. Recompute
   geometry on resize; preserve foreground glyphs and downward fade even at peak white.
 - Twinkles remove consumed base stars from their original cells and fade out
   more slowly than they brighten. After expiry, replenish consumed baseline
@@ -72,7 +72,7 @@
   Include transient weight in cached cells so redraws match animation frames.
 - Compose foreground repairs from final animated cells. Do not paint original
   title colors underneath an overlay or clear/repaint everything on every tick.
-  Retain focus/resize/Ctrl-L repairs and the occasional missing-focus fallback.
+  Retain focus/resize repairs and the occasional missing-focus fallback.
 - Preserve exact rendered cells when optimizing: timing, random draws, hue,
   saturation, fade, glyphs, bold/strike, and density must not change. Compare
   captured frames against the previous renderer using the tools below.

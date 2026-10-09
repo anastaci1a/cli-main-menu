@@ -21,6 +21,8 @@ set -eo pipefail
 starting_directory=$PWD
 source -- "$1"
 source -- "$1"
+# Never call the installed switcher while exercising the menu in tests.
+PATH=/usr/bin:/bin
 [[ $PWD == "$starting_directory" ]]
 for name in ez_select ez_menu_choose ez_menu_banner ez_menu_status ez_menu_draw \
   ez_menu_codex ez_menu_jobs ez_menu_has_stopped_jobs; do
@@ -29,6 +31,26 @@ done
 
 [[ $(alias startup) == "alias startup='clear && ez_select'" ]]
 [[ -n $C_RESET && -n $C_STAR_BLUE && -n $C_DISABLED_NUMBER ]]
+[[ $(ez_codex_resolve_dir //) == / ]]
+[[ $(ez_codex_resolve_dir //tmp) == /tmp ]]
+new_dir_name='new dir +-=~()[] $ !#'
+[[ $(ez_codex_new_dir_target "$starting_directory/$new_dir_name") == "$starting_directory/$new_dir_name" ]]
+literal_dollar_input="$starting_directory/"'literal\$HOME'
+literal_dollar_expected="$starting_directory/"'literal$HOME'
+[[ $(ez_codex_new_dir_target "$literal_dollar_input") == "$literal_dollar_expected" ]]
+[[ $(ez_codex_new_dir_target "$starting_directory/missing/child" 2>/dev/null) == '' ]]
+[[ $(ez_codex_new_dir_target "$starting_directory" 2>/dev/null) == '' ]]
+[[ $(ez_codex_new_dir_name_target "$starting_directory" "$new_dir_name") == "$starting_directory/$new_dir_name" ]]
+[[ $(ez_codex_new_dir_name_target "$starting_directory" 'literal$HOME') == "$literal_dollar_expected" ]]
+[[ $(ez_codex_new_dir_name_target "$starting_directory" 'bad/name' 2>/dev/null) == '' ]]
+[[ $(ez_codex_new_dir_name_target "$starting_directory" '' 2>/dev/null) == '' ]]
+created_dir="$starting_directory/new directory from prompt"
+[[ $(printf '%s\ny\n' "$created_dir" | ez_codex_field 'Start directory' '/' 2>/dev/null) == "$created_dir" ]]
+[[ -d $created_dir ]]
+for case in '0 0:00' '1 0:01' '59 0:59' '60 1:00' '3599 59:59' '3600 1:00:00' '86400 1:00:00:00'; do
+  read -r elapsed expected <<< "$case"
+  [[ $(ez_codex_duration "$elapsed") == "$expected" ]]
+done
 if declare -F _ez_cli_load >/dev/null; then exit 1; fi
 clear() { :; }
 tmux() { [[ $1 == has-session ]] && return 1; return 99; }
@@ -66,6 +88,17 @@ for EZ_MENU_TITLE in 'MAIN MENU' SATELLITE X 'A MUCH LONGER TITLE 123' 'Menu!'; 
     offset=$(( (COLUMNS - ${#title}) / 2 ))
     [[ ${lines[1]:offset:${#title}} == "$title" ]]
   done
+done
+main_hints=$(ez_menu_hint_lines main 4)
+name_hints=$(ez_menu_hint_lines name 1 0)
+empty_directory_hints=$(ez_menu_hint_lines directory 1 0)
+directory_hints=$(ez_menu_hint_lines directory 4 1)
+[[ $main_hints == *'Esc: Exit'* && $main_hints == *'▲/▼: Move'* && $main_hints != *'Ctrl-L'* ]]
+[[ $name_hints == *'Esc: Back'* && $name_hints != *'▲/▼'* && $name_hints != *'Enter:'* && $name_hints != *'Ctrl-L'* ]]
+[[ $empty_directory_hints != *'▲/▼'* && $empty_directory_hints != *'▶/Tab'* && $empty_directory_hints != *'Enter:'* ]]
+[[ $directory_hints == *'◀: Parent'* && $directory_hints == *'Esc: Back'* && $directory_hints != *'parent/Back'* ]]
+for hint_set in "$main_hints" "$name_hints" "$empty_directory_hints" "$directory_hints"; do
+  [[ ! $hint_set =~ :[[:space:]][[:lower:]] ]]
 done
 printf 'PASS config defaults/overrides/reload and responsive titles\n'
 BASH

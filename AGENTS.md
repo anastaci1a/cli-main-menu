@@ -61,13 +61,16 @@ existing function names, and the module split (`init`, `menu`, `select`,
   Exercise changing layouts with `BENCH_SCENARIO=1`, irregular frames with
   `BENCH_JITTER=1`, long runs with `BENCH_WARMUP_MS`, and custom cycles with
   `BENCH_TIME_OFFSET_MS`/`BENCH_HUE_STEP`.
-- After user-visible menu changes, regenerate and inspect the README preview:
+- Keep the preview fixture aligned with user-visible menu changes. Regenerate
+  and inspect it with:
   `bash tools/preview-frames.bash > /tmp/satellite-frames.ansi` followed by
   `node tools/render-preview.cjs /tmp/satellite-frames.ansi media`. Install the
-  optional `tools/package.json` dependencies first if needed.
+  optional `tools/package.json` dependencies first if needed. The GitHub Action
+  also regenerates and commits changed previews on `main`.
 - Check `git diff --check` and inspect staged changes before committing.
-  Commits must use repository-local author and committer
-  `Ana Jahnel <48846277+anastaci1a@users.noreply.github.com>`. Do not change
-  global Git identity or stage private config. The user authorized keeping this
-  repository's `origin/main` current: push completed commits after checks, never
-  force-push, and do not publish other repositories without their request.
+  Human-authored commits must use repository-local author and committer
+  `Ana Jahnel <48846277+anastaci1a@users.noreply.github.com>`; automated preview
+  commits use `github-actions[bot]`. Do not change global Git identity or stage
+  private config. The user authorized keeping this repository's `origin/main`
+  current: push completed commits after checks, never force-push, and do not
+  publish other repositories without their request.

@@ -16,8 +16,13 @@ const streams = fs.readFileSync(input).toString('utf8').split('\0').filter(Boole
 if (!streams.length) throw new Error('No preview frames');
 fs.mkdirSync(outputDir, { recursive: true });
 
-GlobalFonts.registerFromPath('/usr/share/fonts/TTF/DejaVuSansMono.ttf', 'Preview Mono');
-GlobalFonts.registerFromPath('/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf', 'Preview Mono Bold');
+const fontDirs = ['/usr/share/fonts/TTF', '/usr/share/fonts/truetype/dejavu'];
+const fontDir = fontDirs.find(dir =>
+  fs.existsSync(path.join(dir, 'DejaVuSansMono.ttf')) &&
+  fs.existsSync(path.join(dir, 'DejaVuSansMono-Bold.ttf')));
+if (!fontDir) throw new Error('DejaVu Sans Mono is required to render the preview');
+GlobalFonts.registerFromPath(path.join(fontDir, 'DejaVuSansMono.ttf'), 'Preview Mono');
+GlobalFonts.registerFromPath(path.join(fontDir, 'DejaVuSansMono-Bold.ttf'), 'Preview Mono Bold');
 const columns = 80;
 const rows = 24;
 const cellWidth = 11;

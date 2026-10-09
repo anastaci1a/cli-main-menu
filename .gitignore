@@ -4,4 +4,3 @@
 .DS_Store
 /config.bash
 /tools/node_modules/
-/tools/package-lock.json

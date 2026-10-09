@@ -1,0 +1,55 @@
+name: Refresh menu preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.bash'
+      - 'tools/preview-frames.bash'
+      - 'tools/render-preview.cjs'
+      - 'tools/package.json'
+      - 'tools/package-lock.json'
+      - '.github/workflows/menu-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: menu-preview-main
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install preview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+          npm ci --prefix tools --ignore-scripts --no-audit --no-fund
+      - name: Render preview
+        run: |
+          bash tools/preview-frames.bash > "$RUNNER_TEMP/satellite-frames.ansi"
+          node tools/render-preview.cjs "$RUNNER_TEMP/satellite-frames.ansi" media
+      - name: Commit changed preview
+        run: |
+          if git diff --quiet -- media/menu-demo.gif media/menu-preview.png; then
+            echo 'Preview is current.'
+            exit 0
+          fi
+          git fetch origin main
+          if [[ $(git rev-parse HEAD) != $(git rev-parse origin/main) ]]; then
+            echo 'Main advanced; a newer run will refresh the preview.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- media/menu-demo.gif media/menu-preview.png
+          git commit -m 'Refresh README menu preview'
+          git push origin HEAD:main

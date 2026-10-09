@@ -2,6 +2,7 @@
 # Feed terminal frames to render-preview.cjs. This uses the real renderer and
 # simulated menu state; it never opens tmux, Codex, or the user's job table.
 set -eo pipefail
+export LC_ALL=C
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 source -- "$cli_dir/init.bash"
 EZ_MENU_TITLE=SATELLITE
@@ -10,11 +11,25 @@ RANDOM=1967
 title_rows=()
 mapfile -t title_rows < <(ez_menu_title_rows)
 mapfile -t fitted_rows <<< "$(ez_menu_banner 0 2)"
-# Fixed, safe fixture for the current main menu: no Codex sessions or shell jobs,
-# dashboard installed, and automatic switching unavailable.
-labels=('New Terminal' 'Codex: New Session' 'Codex Switcher: Dashboard' 'Automatic Account Switching' 'Jobs' 'Exit')
-menu_enabled=(1 1 1 0 0 1)
-menu_disabled_notes=([3]='(unavailable)' [4]='(no stopped jobs)')
+# Simulate availability without touching tmux, Codex, or live shell jobs. Read
+# labels from the same menu definition as startup, so the preview follows edits.
+ez_menu_has_codex() { return 1; }
+codex-switcher() { :; }
+ez_menu_codex_switching_available() { return 1; }
+ez_menu_codex_monitor_available() { return 0; }
+ez_menu_has_stopped_jobs() { return 1; }
+ez_menu_define_items
+labels=() menu_enabled=() menu_disabled_notes=()
+for entry in "${menu_items[@]}"; do
+  IFS='|' read -r label action behavior enabled_when disabled_note <<< "$entry"
+  labels+=("$label")
+  if [[ -n $enabled_when ]] && ! "$enabled_when"; then
+    menu_enabled+=(0)
+    menu_disabled_notes[${#labels[@]}-1]=$disabled_note
+  else
+    menu_enabled+=(1)
+  fi
+done
 menu_layout_labels=("${labels[@]}")
 visible=${#labels[@]}
 enabled_count=0
@@ -31,7 +46,8 @@ ez_stars_init
 ez_stars_layout "${#fitted_rows[@]}" 5 "${#title_rows[0]}" 2 "${#labels[@]}" 0 "${labels[@]}"
 ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 0 1 "${labels[@]}"
 ez_stars_build_work
-status_date=$(date '+%a %b %d')
+# Keep the sample status date fixed so regenerating on another day is stable.
+status_date='Mon Jan 01'
 # Match the live 20 FPS target so short white/bold peaks survive the preview.
 for ((elapsed = 0; elapsed <= 10000; elapsed += 50)); do
   ez_stars_tick "$elapsed"

@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 # Main menu definition: customize menu_items below.
 
+function ez_menu_define_items() {
+  # Uses the caller's menu_items array so the preview can render these same rows.
+  menu_items=('New Terminal|ez_menu_terminal|close')
+  if ez_menu_has_codex; then
+    menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" 'Codex: Sessions|ez_menu_codex_sessions|stay')
+  else
+    menu_items+=('Codex: New Session|ez_codex_new|stay')
+  fi
+  menu_items+=('Codex Switcher: Dashboard|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
+  if command -v codex-switcher >/dev/null 2>&1 && ! ez_menu_codex_switching_available; then
+    menu_items+=('Automatic Account Switching|:|stay|ez_menu_unavailable|(unavailable)')
+  fi
+  menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
+}
+
 function ez_select() {
   local ez_codex_start_dir=$PWD
   local ez_menu_shared_screen=0
@@ -12,21 +27,7 @@ function ez_select() {
   fi
   banner=$(ez_menu_banner)
   while :; do
-    # CUSTOMIZE HERE: 'Label|action_function|close_or_stay|optional_enabled_check|optional_disabled_note'.
-    # Add/reorder/remove rows; numbering, alignment, scrolling, and star fade
-    # adjust automatically. No option counts or widths need updating elsewhere.
-    # Use command substitution for labels that depend on current state.
-    menu_items=('New Terminal|ez_menu_terminal|close')
-    if ez_menu_has_codex; then
-      menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" 'Codex: Sessions|ez_menu_codex_sessions|stay')
-    else
-      menu_items+=('Codex: New Session|ez_codex_new|stay')
-    fi
-    menu_items+=('Codex Switcher: Dashboard|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
-    if command -v codex-switcher >/dev/null 2>&1 && ! ez_menu_codex_switching_available; then
-      menu_items+=('Automatic Account Switching|:|stay|ez_menu_unavailable|(unavailable)')
-    fi
-    menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
+    ez_menu_define_items
     menu_labels=() menu_actions=() menu_behaviors=() menu_availability=() menu_choice_args=()
     disabled_indices=''
     for entry in "${menu_items[@]}"; do

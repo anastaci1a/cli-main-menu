@@ -232,15 +232,17 @@ goes to stderr; stdout returns the selected zero-based index.
 - New sessions are tmux sessions named `codex-<name>`; the existing `codex`
   session is also recognized and displayed as `codex`. `Codex: Resume (<name>)`
   opens the most recently used one; `Codex: Sessions` lists `[new session]` first,
-  followed by existing sessions. Each row keeps the switcher's account nickname
-  in brackets after its name; the nickname participates in centering and follows
-  the same color fade as the main Resume preview. Sessions outside enrolled
-  account homes show `[external]`, and an unavailable switcher lookup shows
-  `[unknown]`. The selected session shows a live uptime in parentheses (starting
-  at `0:00`) to the right of the centered name and account, without moving the
-  option column or repainting the star field. The session action title also
-  shows its account, and that screen updates the uptime each second. Each
-  existing session can be resumed, renamed, or terminated.
+  followed by existing sessions. Each row keeps the switcher's `display_account`
+  nickname in brackets after its name; the nickname participates in centering
+  and follows the same color fade as the main Resume preview. If no signed-in
+  nickname is verified, the row falls back to the switcher's home-provenance
+  `account` value (`external` for an unenrolled home), or `[unknown]` when no
+  switcher data is available. The selected session shows a live uptime in
+  parentheses, starting at `0:00`, to the right of the centered name and
+  account, without moving the option column or repainting the star field. The
+  session action title also shows its account, and that screen updates the
+  uptime each second. Each existing session can be resumed, renamed, or
+  terminated.
   The session's creation time comes from tmux, so no data file is needed.
 - Detach with Ctrl-B, then D. A new or resumed session opened from the Sessions
   list returns there with that session selected, even if recent activity

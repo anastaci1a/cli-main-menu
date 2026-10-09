@@ -48,14 +48,14 @@ printf 'PASS repeated sourcing starts no switcher or tmux process\n'
 if command -v jq >/dev/null 2>&1; then
   codex-switcher() {
     [[ $1 == instances ]] || return 99
-    printf '[{"inactive":false,"tmux_session":"codex-Alpha","account":"personal"},{"inactive":false,"tmux_session":"codex-Beta","account":"work"},{"inactive":true,"tmux_session":"codex-Gamma","account":"work"}]\n'
+    printf '[{"inactive":false,"tmux_session":"codex-Alpha","account":"external","display_account":"personal"},{"inactive":false,"tmux_session":"codex-Beta","account":"work","display_account":"work"},{"inactive":false,"tmux_session":"codex-Gamma","account":"external","display_account":null},{"inactive":false,"tmux_session":"codex-Delta","account":"work"},{"inactive":true,"tmux_session":"codex-Epsilon","account":"personal","display_account":"personal"}]\n'
   }
-  ez_codex_names=(Alpha Beta Gamma)
+  ez_codex_names=(Alpha Beta Gamma Delta Epsilon)
   ez_codex_session_accounts
-  [[ ${ez_codex_accounts[*]} == 'personal work unknown' ]]
+  [[ ${ez_codex_accounts[*]} == 'personal work external work unknown' ]]
   unset -f codex-switcher
 fi
-printf 'PASS session accounts match live switcher instances by tmux name\n'
+printf 'PASS session labels prefer identity nickname and fall back to account provenance\n'
 
 codex-switcher() {
   printf '<%s>' "$@" >> "$switcher_log"

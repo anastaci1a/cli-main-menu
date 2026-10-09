@@ -44,7 +44,7 @@ ez_codex_session_accounts() {
     instances=$(codex-switcher instances 2>/dev/null) || instances=''
     while IFS=$'\t' read -r session account; do
       [[ -n $session && -n $account ]] && by_session["$session"]=$account
-    done < <(jq -r '.[] | select(.inactive == false) | [.tmux_session, .account] | @tsv' <<< "$instances" 2>/dev/null)
+    done < <(jq -r '.[] | select(.inactive == false) | [.tmux_session, (.display_account // .account // "unknown")] | @tsv' <<< "$instances" 2>/dev/null)
   fi
   for ((index=0; index<${#ez_codex_names[@]}; index++)); do
     session=${ez_codex_names[index]}

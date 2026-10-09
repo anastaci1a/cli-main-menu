@@ -88,9 +88,10 @@ for entry in "${ordered[@]}"; do
   [[ $entry == -- ]] && found=1
 done
 [[ ${labels[0]} == '[new session]' && ${labels[1]} == 'Beta   [personal]' &&
-   ${labels[2]} == 'Alpha* [work]' && ${labels[3]} == 'Saved  [work]' ]]
-[[ " ${ordered[*]} " == *' --gray-suffix 3      (inactive) '* ]]
+   ${labels[2]} == 'Alpha*     [work]' && ${labels[3]} == 'Saved      [work]' ]]
+[[ ${#labels[1]} == ${#labels[2]} && ${#labels[2]} == ${#labels[3]} ]]
+[[ " ${ordered[*]} " == *' --gray-suffix 3  (inactive) '* ]]
 [[ " ${ordered[*]} " == *' --live-duration 1 100  ( selected '* ]]
-[[ " ${ordered[*]} " == *' --live-duration 2 100      ( selected '* ]]
+[[ " ${ordered[*]} " == *' --live-duration 2 100  ( selected '* ]]
 printf 'PASS Sessions orders running, idle, then inactive and marks idle tmux sessions\n'
-printf 'PASS timers and inactive labels share a column across different account widths\n'
+printf 'PASS account labels align right with one space before timers and inactive labels\n'

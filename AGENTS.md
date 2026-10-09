@@ -64,5 +64,6 @@ existing function names, and the module split (`init`, `menu`, `select`,
 - Check `git diff --check` and inspect staged changes before committing.
   Commits must use repository-local author and committer
   `Ana Jahnel <48846277+anastaci1a@users.noreply.github.com>`. Do not change
-  global Git identity, stage private config, create a remote, or publish without
-  the user's request.
+  global Git identity or stage private config. The user authorized keeping this
+  repository's `origin/main` current: push completed commits after checks, never
+  force-push, and do not publish other repositories without their request.

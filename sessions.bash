@@ -663,7 +663,7 @@ ez_codex_move_info() {
 }
 
 ez_codex_session_idle() {
-  local state pane process pid command
+  local state pane process pid command pane_text line
   state=$(tmux display-message -p -t "$1" '#{session_attached}|#{pane_dead}' 2>/dev/null) || return 1
   [[ $state == '0|1' ]] && return 0
   [[ $state == '0|0' ]] || return 1
@@ -677,7 +677,11 @@ ez_codex_session_idle() {
   pid=${process%%|*} command=${process#*|}
   [[ $pid =~ ^[0-9]+$ && $command == codex ]] || return 1
   ez_codex_idle_children "$pid" || return 1
-  tmux capture-pane -p -t "$pane" 2>/dev/null | rg -q '^› '
+  pane_text=$(tmux capture-pane -p -t "$pane" 2>/dev/null) || return 1
+  while IFS= read -r line; do
+    [[ $line == '› '* ]] && return 0
+  done <<< "$pane_text"
+  return 1
 }
 
 ez_codex_rollout_complete() {

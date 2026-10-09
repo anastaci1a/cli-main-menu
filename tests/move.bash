@@ -121,12 +121,14 @@ ez_codex_move_info '$9'
 printf 'PASS live Move requires a detached pane with a completed turn\n'
 
 instance_mode=unknown
+rg() { printf 'unexpected rg dependency\n' >&2; return 127; }
 ez_codex_session_idle '$9'
 ready_prompt=0
 if ez_codex_session_idle '$9'; then exit 1; fi
 ready_prompt=1 attached=1
 if ez_codex_session_idle '$9'; then exit 1; fi
 attached=0 instance_mode=live
+unset -f rg
 printf 'PASS detached unidentified Codex pane shows idle only at its input prompt\n'
 
 kill() { builtin kill "$@"; pane_dead=1; }

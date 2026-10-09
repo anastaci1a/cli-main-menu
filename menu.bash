@@ -22,11 +22,9 @@ function ez_select() {
     else
       menu_items+=('Codex: New Session|ez_codex_new|stay')
     fi
-    if ez_menu_codex_monitor_available; then
-      menu_items+=('Codex: Account Monitor|ez_menu_codex_monitor|stay')
-    fi
+    menu_items+=('Codex Switcher: Dashboard|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
     if command -v codex-switcher >/dev/null 2>&1 && ! ez_menu_codex_switching_available; then
-      menu_items+=('Automatic account switching unavailable|:|stay|ez_menu_unavailable')
+      menu_items+=('Automatic Account Switching|:|stay|ez_menu_unavailable|(unavailable)')
     fi
     menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
     menu_labels=() menu_actions=() menu_behaviors=() menu_availability=() menu_choice_args=()

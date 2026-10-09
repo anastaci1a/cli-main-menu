@@ -241,6 +241,10 @@ function ez_menu_option_layout() {
 # Draw foreground words while revealing the animated field through their spaces.
 function ez_menu_overlay_text() {
   local row=$1 col=$2 text=$3 color=$4 weight=$5 word spaces
+  if [[ $weight == "$C_STRIKE" ]]; then
+    printf '%s%s%s%s' "$color" "$weight" "$text" "$C_RESET"
+    return
+  fi
   while [[ $text == *' '* ]]; do
     word=${text%% *}
     [[ -z $word ]] || printf '%s%s%s%s' "$color" "$weight" "$word" "$C_RESET"

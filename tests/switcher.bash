@@ -47,6 +47,7 @@ printf 'PASS repeated sourcing starts no switcher or tmux process\n'
 
 PATH='/tmp/path with spaces'
 TMUX=''
+unset CODEX_HOME
 CODEX_SWITCHER_HOME="$test_root/state with spaces"
 export CODEX_SWITCHER_HOME
 ez_menu_codex_monitor_available
@@ -58,7 +59,7 @@ ez_menu_codex_monitor >/dev/null 2>&1
 if ez_menu_has_codex; then exit 1; fi
 tmux_output=$(< "$tmux_log")
 [[ $tmux_output == *'new-session<-d><-s><codex-switcher><-e><PATH=/tmp/path with spaces><-e><CODEX_SWITCHER_HOME='* ]]
-[[ $tmux_output == *'<codex-switcher ui>'* ]]
+[[ $tmux_output == *'<codex-switcher><ui>'* ]]
 new_count=0
 while IFS= read -r line; do [[ $line != new-session* ]] || new_count=$((new_count+1)); done <<< "$tmux_output"
 [[ $new_count == 1 ]]
@@ -82,13 +83,20 @@ ez_codex_field() {
 }
 ez_codex_new >/dev/null 2>&1
 tmux_output=$(< "$tmux_log")
-[[ $tmux_output == *"new-session<-d><-P><-F><#{session_id}><-s><codex-test-name><-c><$test_dir><codex --dangerously-bypass-approvals-and-sandbox>"* ]]
+[[ $tmux_output == *"new-session<-d><-P><-F><#{session_id}><-s><codex-test-name><-c><$test_dir><-e><PATH=/tmp/path with spaces>"* ]]
+[[ $tmux_output == *'<satellite-codex><codex><--dangerously-bypass-approvals-and-sandbox>'* ]]
+[[ $tmux_output == *'switch-client<-t><$0>'* ]]
 [[ $(< "$switcher_log") != *'<run>'* ]]
 printf 'PASS readiness does not change direct Codex launch or quoted arguments\n'
+
+TMUX=''
+ez_codex_new >/dev/null 2>&1
+[[ $(< "$tmux_log") == *'attach-session<-t><$0>'* ]]
+printf 'PASS Codex attaches outside tmux and switches clients inside tmux\n'
 
 PATH=''
 unset -f tmux
 if ez_menu_codex_monitor_available; then exit 1; fi
 unset -f codex-switcher
 if ez_menu_codex_monitor_available || ez_menu_codex_switching_available; then exit 1; fi
-printf 'PASS missing binaries hide the monitor action\n'
+printf 'PASS missing binaries disable the dashboard action\n'

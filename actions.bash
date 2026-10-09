@@ -15,13 +15,41 @@ function ez_menu_codex_switching_available() {
 
 function ez_menu_unavailable() { return 1; }
 
+# tmux's server may predate the current shell's configuration. Copy the current
+# values, including explicit unsets, without choosing an account or a new home.
+# The caller owns the dynamically scoped environment array.
+function ez_menu_launch_environment() {
+  local variable
+  environment=(-e "PATH=$PATH")
+  for variable in CODEX_HOME CODEX_SWITCHER_HOME; do
+    if [[ -v $variable ]]; then environment+=(-e "$variable=${!variable}"); fi
+  done
+}
+
+# Build an exec-only pane bootstrap. Some minimal hosts ship xterm terminfo but
+# not tmux's default tmux-256color entry. Do not change global tmux options.
+function ez_menu_pane_command() {
+  local retain_failure=$1 setup variable
+  shift
+  setup='if command -v infocmp >/dev/null 2>&1 && ! infocmp "${TERM:-}" >/dev/null 2>&1 && infocmp xterm-256color >/dev/null 2>&1; then export TERM=xterm-256color; fi; '
+  # tmux -e NAME does not remove a value inherited from its global environment.
+  for variable in CODEX_HOME CODEX_SWITCHER_HOME; do
+    [[ -v $variable ]] || setup+="unset $variable; "
+  done
+  if (( retain_failure )); then
+    setup+='tmux set-option -p -t "$TMUX_PANE" remain-on-exit failed || exit; '
+  fi
+  pane_command=(/bin/sh -c "$setup"'exec "$@"' satellite-codex "$@")
+}
+
 function ez_menu_codex_monitor() {
   ez_menu_codex_monitor_available || return 1
   local target='=codex-switcher' result
-  local -a environment=(-e "PATH=$PATH")
-  [[ ! ${CODEX_SWITCHER_HOME+x} ]] || environment+=(-e "CODEX_SWITCHER_HOME=$CODEX_SWITCHER_HOME")
+  local -a environment pane_command
+  ez_menu_launch_environment
+  ez_menu_pane_command 0 codex-switcher ui
   if ! tmux has-session -t "$target" 2>/dev/null; then
-    tmux new-session -d -s codex-switcher "${environment[@]}" 'codex-switcher ui' ||
+    tmux new-session -d -s codex-switcher "${environment[@]}" "${pane_command[@]}" ||
       tmux has-session -t "$target" 2>/dev/null || return 1
   fi
   if [[ -n ${TMUX:-} ]]; then

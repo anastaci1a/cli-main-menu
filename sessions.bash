@@ -44,10 +44,14 @@ ez_menu_codex_label() {
   return 0
 }
 ez_codex_attach() {
-  tmux has-session -t "$1" 2>/dev/null || return 0
+  tmux has-session -t "$1" 2>/dev/null || { printf 'Codex session is no longer available.\n' >&2; return 1; }
   local now
   printf -v now '%(%s)T' -1
   tmux set-option -t "$1" @ez_codex_last_used "$now" || return
+  if [[ -n ${TMUX:-} ]]; then
+    tmux switch-client -t "$1"
+    return $?
+  fi
   (( ${ez_menu_shared_screen:-0} )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
   tmux attach-session -t "$1"
   local result=$?
@@ -487,7 +491,13 @@ ez_codex_new() {
   name=$(ez_codex_field 'Session name' '') || return 0
   dir=$(ez_codex_field 'Start directory' "${ez_codex_start_dir:-$PWD}") || return 0
   ez_codex_valid_name "$name" || { printf 'Session name is already in use.\n' >&2; return 0; }
-  id=$(tmux new-session -d -P -F '#{session_id}' -s "codex-$name" -c "$dir" 'codex --dangerously-bypass-approvals-and-sandbox') || return
+  local -a environment pane_command
+  ez_menu_launch_environment
+  ez_menu_pane_command 1 codex --dangerously-bypass-approvals-and-sandbox
+  # Keep failures visible before exec, without a waiting parent process: the
+  # switcher's manual move needs the pane PID to be the Codex process itself.
+  # Multiple command arguments bypass tmux's default shell and preserve quoting.
+  id=$(tmux new-session -d -P -F '#{session_id}' -s "codex-$name" -c "$dir" "${environment[@]}" "${pane_command[@]}") || return
   ez_codex_attach "$id"
 }
 ez_codex_actions() {

@@ -363,7 +363,9 @@ function ez_stars_text_layout() {
     accent_suffix=${menu_accent_suffix[index]-}
     accent_start=$(( ${#label} - ${#accent_suffix} ))
     for ((col = 0; col < ${#label}; col++)); do
-      [[ ${label:col:1} == ' ' ]] && continue
+      # Struck spaces are foreground too; keep animation from erasing the line.
+      if [[ ${label:col:1} == ' ' ]] &&
+        { [[ ${menu_enabled[index]:-1} != 0 ]] || (( col >= ${#labels[index]} )); }; then continue; fi
       cell=$(((row - 1) * COLUMNS + option_left + 2 + col))
       stars_occluded[$cell]=1
     done

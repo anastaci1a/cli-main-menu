@@ -240,16 +240,31 @@ goes to stderr; stdout returns the selected zero-based index.
 - Detach with Ctrl-B, then D. A new or resumed session opened from the Sessions
   list returns there; the main Resume action returns to the main menu.
   The existing `cxr` alias continues to attach to the `codex` session.
-- When `codex-switcher` and `tmux` are installed, `Codex: Account Monitor`
+- New sessions inherit the calling shell's `PATH`, `CODEX_HOME`, and
+  `CODEX_SWITCHER_HOME`, including unset values, instead of stale tmux server
+  settings. Codex reads its own configuration; switcher settings do not select
+  an account for new launches. Failed launches retain their pane and error
+  output (`remain-on-exit failed`); inspect it through Resume, then Terminate
+  the failed session when finished. Successful exits close normally.
+  New Codex and dashboard panes fall back to installed `xterm-256color` terminfo
+  if tmux's default terminal type is unavailable on the host. This does not
+  change global tmux settings. Inside tmux, Resume switches the current client
+  instead of attempting a nested attachment.
+- When `codex-switcher` and `tmux` are installed, `Codex Switcher: Dashboard`
   opens or reuses a dedicated `codex-switcher` tmux session running
   `codex-switcher ui`. From outside tmux, Ctrl-B then D detaches the dashboard
   and returns to the menu. From inside tmux, the action switches clients without
   nesting; Ctrl-B then L switches back to the previous session. Quitting the
-  dashboard leaves its supervisor running. The dashboard is read-only; use
-  `codex-switcher config` commands to change settings. It uses the existing
+  dashboard leaves its supervisor running. Press **c** to edit configuration
+  (arrows select, Enter edits/saves, Esc returns), or **m** to move an existing
+  Codex instance to another account after its turn completes. The switcher owns
+  move validation and any background-process approval. Enter/q/Esc closes the
+  dashboard; `codex-switcher config` commands remain available. It uses the existing
   `CODEX_SWITCHER_HOME` when that variable is set.
-- When `codex-switcher ready` fails, the menu shows **Automatic account
-  switching unavailable**. Readiness is checked when the main menu is built,
+  When either binary is missing, the dashboard label is struck through with an
+  unstruck `(unavailable)` suffix.
+- When `codex-switcher ready` fails, the menu shows **Automatic Account
+  Switching (unavailable)**. Readiness is checked when the main menu is built,
   not on animation frames. The enrolled `personal` and `work` accounts can be
   monitored, but normal Codex launches and resumes stay on their direct path.
   This integration adds account monitoring access; autonomous switching remains
@@ -273,6 +288,7 @@ goes to stderr; stdout returns the selected zero-based index.
 ```bash
 bash tests/smoke.bash
 bash tests/switcher.bash
+bash tests/launch.bash
 bash tests/stars.bash
 perl tests/terminal.pl
 ```

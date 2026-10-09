@@ -485,6 +485,19 @@ ez_stars_tick 2000
 [[ ${#stars_birth[@]} == 0 ]]
 printf 'PASS clear option spaces, foreground occlusion, and preserved underlying glyph stars\n'
 
+(
+  menu_enabled=(0)
+  ez_stars_text_layout 10 1 2 0 0 0 'A B'
+  [[ ${stars_occluded[$gap]} == 1 ]]
+  rendered=$(ez_menu_overlay_text 13 "$((option_left + 2))" 'A B' "$C_DISABLED" "$C_STRIKE")
+  [[ $rendered == "$C_DISABLED${C_STRIKE}A B$C_RESET" ]]
+  stars_cells=("$gap") stars_char=() stars_birth=()
+  stars_next=0 stars_horizon_next=0
+  ez_stars_tick 2000
+  [[ ${#stars_birth[@]} == 0 ]]
+)
+printf 'PASS continuous disabled-label strike and protected spaces\n'
+
 # The baseline multiplier changes quantity, not the horizon weights or twinkle
 # clock. A large sample distinguishes half the former population from 50% fill.
 (

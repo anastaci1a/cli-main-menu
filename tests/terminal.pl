@@ -195,6 +195,8 @@ finish();
 print "PASS selected session uptime increments and disappears on selection change\n";
 start_case('inactive_styling');
 expect(qr/Saved.*\(inactive\)/,'persistent inactive label');
+my ($inactive_prefix)=plain($buf) =~ /\r([^\r\n]*?)●[ *+.]Saved/;
+die 'inactive suffix changed menu centering' unless defined($inactive_prefix) && length($inactive_prefix)==33;
 die 'selected inactive suffix is not gray' unless $buf =~ /\e\[38;5;250m \(inactive\)\e\[0m/;
 my $inactive_offset=length $buf;
 send_keys("\e[B");

@@ -234,7 +234,6 @@ function ez_menu_choose() (
             'Codex: Start ('*) menu_layout_labels[index]='Codex: Start' ;;
           esac
           [[ ${duration_created[index]+set} && ${duration_mode[index]} == always ]] && menu_layout_labels[index]+="${duration_prefix[index]}9999:23:59:59)"
-          [[ ${specified_gray_suffix[index]+set} ]] && menu_layout_labels[index]+=${specified_gray_suffix[index]}
         done
         set -- "${responsive_labels[@]}"
         if [[ -n $screen_title ]]; then

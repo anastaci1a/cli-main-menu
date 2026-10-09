@@ -1156,6 +1156,7 @@ ez_codex_actions() {
 }
 ez_menu_codex_sessions() {
   local selected=0 index position live_count chosen selected_key='' thread name account_pad account_column=0
+  local account status_pad account_width=0
   local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank ez_codex_accounts uptime_args session_labels
   local -a ez_inactive_ids ez_inactive_names ez_inactive_accounts ez_inactive_cwds ez_inactive_homes
   local -a ez_inactive_binaries ez_inactive_rollouts ez_inactive_reasons ez_inactive_json
@@ -1204,21 +1205,27 @@ ez_menu_codex_sessions() {
     for name in "${ez_inactive_names[@]}"; do
       (( ${#name} > account_column )) && account_column=${#name}
     done
+    account_width=0
+    for account in "${ez_codex_accounts[@]}" "${ez_inactive_accounts[@]}"; do
+      (( ${#account} > account_width )) && account_width=${#account}
+    done
     uptime_args=() session_labels=()
     for ((position=0;position<live_count;position++)); do
       index=${live_order[position]}
       name=${ez_codex_names[index]}
       (( live_idle[index] )) && name+='*'
       printf -v account_pad '%*s' "$((account_column - ${#name}))" ''
-      uptime_args+=(--live-duration "$((position+1))" "${ez_codex_created[index]}" ' (' selected)
+      printf -v status_pad '%*s' "$((account_width - ${#ez_codex_accounts[index]}))" ''
+      uptime_args+=(--live-duration "$((position+1))" "${ez_codex_created[index]}" "$status_pad (" selected)
       uptime_args+=(--accent-suffix "$((position+1))" "$account_pad [${ez_codex_accounts[index]}]")
       session_labels+=("$name$account_pad [${ez_codex_accounts[index]}]")
     done
     for ((index=0;index<${#ez_inactive_ids[@]};index++)); do
       name=${ez_inactive_names[index]}
       printf -v account_pad '%*s' "$((account_column - ${#name}))" ''
+      printf -v status_pad '%*s' "$((account_width - ${#ez_inactive_accounts[index]}))" ''
       uptime_args+=(--accent-suffix "$((live_count+index+1))" "$account_pad [${ez_inactive_accounts[index]}]")
-      uptime_args+=(--gray-suffix "$((live_count+index+1))" ' (inactive)')
+      uptime_args+=(--gray-suffix "$((live_count+index+1))" "$status_pad (inactive)")
       session_labels+=("$name$account_pad [${ez_inactive_accounts[index]}]")
     done
     selected=$(ez_menu_choose "$selected" '' --screen-title 'Codex: Sessions' "${uptime_args[@]}" -- '[new session]' "${session_labels[@]}") || return 0

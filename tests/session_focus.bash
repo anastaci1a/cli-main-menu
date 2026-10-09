@@ -68,6 +68,7 @@ done
 printf 'PASS session focus follows the tmux ID after reorder or creation and resets after removal\n'
 
 ez_codex_session_idle() { [[ $1 == '$1' ]]; }
+ez_codex_session_accounts() { ez_codex_accounts=(work personal); }
 ez_codex_inactive_scan() {
   ez_inactive_ids=(12345678-1234-1234-1234-123456789abc)
   ez_inactive_names=(Saved)
@@ -87,6 +88,9 @@ for entry in "${ordered[@]}"; do
   [[ $entry == -- ]] && found=1
 done
 [[ ${labels[0]} == '[new session]' && ${labels[1]} == 'Beta   [personal]' &&
-   ${labels[2]} == 'Alpha* [personal]' && ${labels[3]} == 'Saved  [work]' ]]
-[[ " ${ordered[*]} " == *' --gray-suffix 3  (inactive) '* ]]
+   ${labels[2]} == 'Alpha* [work]' && ${labels[3]} == 'Saved  [work]' ]]
+[[ " ${ordered[*]} " == *' --gray-suffix 3      (inactive) '* ]]
+[[ " ${ordered[*]} " == *' --live-duration 1 100  ( selected '* ]]
+[[ " ${ordered[*]} " == *' --live-duration 2 100      ( selected '* ]]
 printf 'PASS Sessions orders running, idle, then inactive and marks idle tmux sessions\n'
+printf 'PASS timers and inactive labels share a column across different account widths\n'

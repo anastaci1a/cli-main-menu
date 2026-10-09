@@ -243,7 +243,8 @@ goes to stderr; stdout returns the selected zero-based index.
   existing session can be resumed, renamed, or terminated.
   The session's creation time comes from tmux, so no data file is needed.
 - Detach with Ctrl-B, then D. A new or resumed session opened from the Sessions
-  list returns there; the main Resume action returns to the main menu.
+  list returns there with that session selected, even if recent activity
+  changes its position; the main Resume action returns to the main menu.
   The existing `cxr` alias continues to attach to the `codex` session.
 - New sessions inherit the calling shell's `PATH`, `CODEX_HOME`, and
   `CODEX_SWITCHER_HOME`, including unset values, instead of stale tmux server

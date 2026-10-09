@@ -515,6 +515,7 @@ ez_codex_new() {
   # switcher's manual move needs the pane PID to be the Codex process itself.
   # Multiple command arguments bypass tmux's default shell and preserve quoting.
   id=$(tmux new-session -d -P -F '#{session_id}' -s "codex-$name" -c "$dir" "${environment[@]}" "${pane_command[@]}") || return
+  ez_codex_new_id=$id
   ez_codex_attach "$id"
 }
 ez_codex_actions() {
@@ -528,10 +529,19 @@ ez_codex_actions() {
   esac
 }
 ez_menu_codex_sessions() {
-  local selected=0 index
+  local selected=0 index selected_id=''
   local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank ez_codex_accounts uptime_args session_labels
   while :; do
     ez_codex_scan
+    if [[ -n $selected_id ]]; then
+      selected=0
+      for ((index=0;index<${#ez_codex_ids[@]};index++)); do
+        if [[ ${ez_codex_ids[index]} == "$selected_id" ]]; then
+          selected=$((index+1))
+          break
+        fi
+      done
+    fi
     (( selected > ${#ez_codex_ids[@]} )) && selected=0
     ez_codex_session_accounts
     uptime_args=() session_labels=()
@@ -541,9 +551,13 @@ ez_menu_codex_sessions() {
       session_labels+=("${ez_codex_names[index]} [${ez_codex_accounts[index]}]")
     done
     selected=$(ez_menu_choose "$selected" '' --screen-title 'Codex: Sessions' "${uptime_args[@]}" -- '[new session]' "${session_labels[@]}") || return 0
-    if (( selected==0 )); then ez_codex_new
+    if (( selected==0 )); then
+      ez_codex_new_id=''
+      ez_codex_new
+      selected_id=$ez_codex_new_id
     else
       index=$((selected-1))
+      selected_id=${ez_codex_ids[index]}
       ez_codex_actions "${ez_codex_ids[index]}" "${ez_codex_names[index]}" "${ez_codex_created[index]}" "${ez_codex_accounts[index]}"
     fi
   done

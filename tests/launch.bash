@@ -33,6 +33,7 @@ ez_codex_field() {
 ez_codex_attach() { created_id=$1; }
 test_name=failed
 ez_codex_new
+[[ $ez_codex_new_id == "$created_id" ]]
 for ((attempt=0;attempt<100;attempt++)); do
   [[ $(tmux display-message -p -t "$created_id:" '#{pane_dead}') == 1 ]] && break
   sleep 0.02

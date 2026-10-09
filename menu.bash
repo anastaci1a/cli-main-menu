@@ -10,9 +10,6 @@ function ez_menu_define_items() {
     menu_items+=('Codex: New Session|ez_codex_new|stay')
   fi
   menu_items+=('Codex Switcher: Dashboard|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
-  if command -v codex-switcher >/dev/null 2>&1 && ! ez_menu_codex_switching_available; then
-    menu_items+=('Automatic Account Switching|:|stay|ez_menu_unavailable|(unavailable)')
-  fi
   menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
 }
 

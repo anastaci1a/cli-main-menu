@@ -13,8 +13,6 @@ function ez_menu_codex_switching_available() {
   command -v codex-switcher >/dev/null 2>&1 && codex-switcher ready >/dev/null 2>&1
 }
 
-function ez_menu_unavailable() { return 1; }
-
 # tmux's server may predate the current shell's configuration. Copy the current
 # values, including explicit unsets, without choosing an account or a new home.
 # The caller owns the dynamically scoped environment array.

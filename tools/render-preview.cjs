@@ -12,7 +12,9 @@ if (!input || !outputDir) {
   process.stderr.write('Usage: node tools/render-preview.cjs FRAMES_FILE OUTPUT_DIR\n');
   process.exit(2);
 }
-const streams = fs.readFileSync(input).toString('utf8').split('\0').filter(Boolean);
+// Reject split UTF-8 glyphs before they turn into replacement diamonds in the GIF.
+const streams = new TextDecoder('utf-8', { fatal: true })
+  .decode(fs.readFileSync(input)).split('\0').filter(Boolean);
 if (!streams.length) throw new Error('No preview frames');
 fs.mkdirSync(outputDir, { recursive: true });
 

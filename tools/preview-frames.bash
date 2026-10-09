@@ -2,7 +2,20 @@
 # Feed terminal frames to render-preview.cjs. This uses the real renderer and
 # simulated menu state; it never opens tmux, Codex, or the user's job table.
 set -eo pipefail
-export LC_ALL=C
+# Bash's substring operations must count UTF-8 characters, not bytes: the
+# shimmer addresses individual cells, including the arrow glyphs in the hints.
+utf8_locale=''
+while IFS= read -r locale_name; do
+  case ${locale_name,,} in
+    c.utf8|c.utf-8) utf8_locale=$locale_name; break ;;
+    en_us.utf8|en_us.utf-8) utf8_locale=$locale_name ;;
+  esac
+done < <(LC_ALL=C locale -a)
+if [[ -z $utf8_locale ]]; then
+  printf 'Preview generation requires a UTF-8 locale.\n' >&2
+  exit 1
+fi
+export LC_ALL=$utf8_locale
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 source -- "$cli_dir/init.bash"
 EZ_MENU_TITLE=SATELLITE
@@ -15,7 +28,6 @@ mapfile -t fitted_rows <<< "$(ez_menu_banner 0 2)"
 # labels from the same menu definition as startup, so the preview follows edits.
 ez_menu_has_codex() { return 1; }
 codex-switcher() { :; }
-ez_menu_codex_switching_available() { return 1; }
 ez_menu_codex_monitor_available() { return 0; }
 ez_menu_has_stopped_jobs() { return 1; }
 ez_menu_define_items

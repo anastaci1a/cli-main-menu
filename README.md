@@ -41,10 +41,9 @@ available on each screen.
   lets you resume, rename, or terminate each session. The selected session has a
   live uptime; its bracketed account label comes from Codex Switcher when
   available. **Codex: Resume** opens the most recently used session.
-- **Codex Switcher: Dashboard** opens account monitoring and manual moves. Its
-  automatic switching indicator remains unavailable until the switcher supports
-  managed launches. New sessions here run Codex directly using your current
-  configuration; the dashboard does not choose their account.
+- **Codex Switcher: Dashboard** opens account monitoring and manual moves. New
+  sessions launched here run Codex using your current configuration; the
+  dashboard does not choose their account.
 - **Jobs** manages stopped jobs from this shell. It is unavailable when none
   exist.
 

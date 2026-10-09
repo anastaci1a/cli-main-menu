@@ -172,6 +172,18 @@ die 'uptime tick repainted option rows or the star field' if $duration_tick_outp
 my $duration_plain=plain($buf);
 my @durations=($duration_plain =~ /\((\d+:\d{2})\)/g);
 die 'selected session duration did not increment' unless @durations > 1 && $durations[-1] ne $durations[0];
+my $back_focus_marker=length $buf;
+send_keys("\e[D");
+my $back_focus_frame=plain(substr($buf,$back_focus_marker));
+my ($back_session_row)=$back_focus_frame =~ /(○[ *+.]Alpha[^\r\n]*)/;
+die 'Back focus kept the selected session timer' unless defined($back_session_row)
+  && $back_session_row !~ /\(\d+:\d{2}\)/;
+die 'Back focus repainted the star field' if substr($buf,$back_focus_marker) =~ /\e\[H|\e\[2J/;
+my $session_focus_marker=length $buf;
+send_keys("\e[C");
+my $session_focus_frame=plain(substr($buf,$session_focus_marker));
+die 'session timer did not return after leaving Back focus'
+  unless $session_focus_frame =~ /●[ *+.]Alpha \(\d+:\d{2}\)/;
 my $unselected_marker=length $buf;
 send_keys("\e[A");
 my $unselected_frame=substr($buf,$unselected_marker);

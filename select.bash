@@ -189,7 +189,7 @@ function ez_menu_choose() (
       done
       printf -v now '%(%s)T' -1
       for ((index=0; index<count; index++)); do
-        if [[ ${duration_created[index]+set} ]] && { [[ ${duration_mode[index]} == always ]] || (( index == selected )); }; then
+        if [[ ${duration_created[index]+set} ]] && { [[ ${duration_mode[index]} == always ]] || (( index == selected && ! menu_back_focused )); }; then
           live_suffix="${duration_prefix[index]}$(ez_codex_duration "$((now-duration_created[index]))"))"
           responsive_labels[index]+=$live_suffix
           menu_gray_suffix[index]=$live_suffix

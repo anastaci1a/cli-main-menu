@@ -61,6 +61,10 @@ existing function names, and the module split (`init`, `menu`, `select`,
   Exercise changing layouts with `BENCH_SCENARIO=1`, irregular frames with
   `BENCH_JITTER=1`, long runs with `BENCH_WARMUP_MS`, and custom cycles with
   `BENCH_TIME_OFFSET_MS`/`BENCH_HUE_STEP`.
+- After user-visible menu changes, regenerate and inspect the README preview:
+  `bash tools/preview-frames.bash > /tmp/satellite-frames.ansi` followed by
+  `node tools/render-preview.cjs /tmp/satellite-frames.ansi media`. Install the
+  optional `tools/package.json` dependencies first if needed.
 - Check `git diff --check` and inspect staged changes before committing.
   Commits must use repository-local author and committer
   `Ana Jahnel <48846277+anastaci1a@users.noreply.github.com>`. Do not change

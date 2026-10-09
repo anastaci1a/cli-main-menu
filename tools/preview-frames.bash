@@ -5,15 +5,21 @@ set -eo pipefail
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 source -- "$cli_dir/init.bash"
 EZ_MENU_TITLE=SATELLITE
-COLUMNS=80 LINES=24 ez_stars_animated=1 visible=4
+COLUMNS=80 LINES=24 ez_stars_animated=1
 RANDOM=1967
 title_rows=()
 mapfile -t title_rows < <(ez_menu_title_rows)
 mapfile -t fitted_rows <<< "$(ez_menu_banner 0 2)"
-mapfile -t hint_rows < <(ez_menu_hint_lines)
-labels=('New Terminal' 'Start Codex' 'Jobs' 'Exit')
-menu_enabled=(1 1 0 1)
-menu_disabled_notes=([2]='(no stopped jobs)')
+# Fixed, safe fixture for the current main menu: no Codex sessions or shell jobs,
+# dashboard installed, and automatic switching unavailable.
+labels=('New Terminal' 'Codex: New Session' 'Codex Switcher: Dashboard' 'Automatic Account Switching' 'Jobs' 'Exit')
+menu_enabled=(1 1 1 0 0 1)
+menu_disabled_notes=([3]='(unavailable)' [4]='(no stopped jobs)')
+menu_layout_labels=("${labels[@]}")
+visible=${#labels[@]}
+enabled_count=0
+for enabled in "${menu_enabled[@]}"; do enabled_count=$((enabled_count + enabled)); done
+mapfile -t hint_rows < <(ez_menu_hint_lines main "$enabled_count")
 read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${labels[@]}")
 
 declare -a stars_cells stars_fade stars_hue stars_sat stars_value
@@ -39,7 +45,7 @@ for ((elapsed = 0; elapsed <= 10000; elapsed += 50)); do
       ez_stars_render_span "$screen_row" 0 "$COLUMNS"
       printf '\r\n'
     done
-    ez_menu_draw 1 0 4 "${labels[@]}"
+    ez_menu_draw 1 0 "$visible" "${labels[@]}"
     printf '\r\033[J'
   )
   printf '%s\0' "$frame"

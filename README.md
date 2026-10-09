@@ -22,8 +22,9 @@ startup
 
 Sourcing the file only defines commands; it does not open the menu. Bash 4+,
 `date`, `stty`, and `clear` are required. Codex sessions need `tmux` and `codex`.
-The dashboard needs `codex-switcher`; `jq` enables its account nicknames in the
-Sessions list.
+The dashboard and saved-conversation list need `codex-switcher`; `jq` enables
+their account labels and Move actions. Moving a folder across filesystems also
+needs `rsync`.
 
 ## Use the menu
 
@@ -37,10 +38,20 @@ available on each screen.
   name and starting directory. The directory picker starts at your current
   directory, lets you browse or type a path, and can create a new directory.
   Session names may contain letters, digits, spaces, and `_+-=~()[]`.
-- **Codex: Sessions** appears when sessions exist. It lists `[new session]` and
-  lets you resume, rename, or terminate each session. The selected session has a
-  live uptime; its bracketed account label comes from Codex Switcher when
-  available. **Codex: Resume** opens the most recently used session.
+- **Codex: Sessions** lists running tmux sessions, detached idle tmux sessions
+  marked `*`, and saved conversations marked `(inactive)`, newest first within
+  each group. It shows the switcher's account nickname in brackets. You can
+  resume, rename, move, or terminate an idle tmux session; Terminate keeps its
+  conversation available under inactive sessions. Inactive conversations have
+  Start, Rename, Move, and a confirmed Delete action. Rename stores a display
+  alias in `~/.local/state/satellite-cli/session-names.tsv` (or `XDG_STATE_HOME`).
+  **Codex: Resume** opens the most recent tmux session; **Codex: Start** opens
+  the most recent saved conversation when no tmux session exists.
+- **Move** can change only the session root, or move its folder into a chosen
+  parent directory and rename it. Both paths resume the same Codex conversation
+  under its original account. A running turn, attached tmux session, or active
+  child process disables Move. Cross-filesystem moves check free space and show
+  copy progress.
 - **Codex Switcher: Dashboard** opens account monitoring and manual moves. New
   sessions launched here run Codex using your current configuration; the
   dashboard does not choose their account.
@@ -66,6 +77,8 @@ change the main menu.
 bash tests/smoke.bash
 bash tests/switcher.bash
 bash tests/session_focus.bash
+bash tests/move.bash
+bash tests/move_tmux.bash
 bash tests/launch.bash
 bash tests/stars.bash
 perl tests/terminal.pl

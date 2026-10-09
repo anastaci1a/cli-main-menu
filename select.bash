@@ -52,7 +52,7 @@ function ez_menu_choose() (
   local -A stars_text_flash stars_occluded
   local -A stars_hue_offset stars_cell_render stars_text_palette
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
-  local -a duration_created=() duration_prefix=() duration_mode=() specified_accent_suffix=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
+  local -a duration_created=() duration_prefix=() duration_mode=() specified_accent_suffix=() specified_gray_suffix=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
   shift 2
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
@@ -83,6 +83,11 @@ function ez_menu_choose() (
         specified_accent_suffix[$2]=$3
         shift 3
         ;;
+      --gray-suffix)
+        (( $# >= 3 )) && [[ $2 =~ ^[0-9]+$ ]] || return 1
+        specified_gray_suffix[$2]=$3
+        shift 3
+        ;;
       --) shift; break ;;
       *) break ;;
     esac
@@ -110,6 +115,7 @@ function ez_menu_choose() (
         original_labels[index]+="${duration_prefix[index]}$(ez_codex_duration "$((now-duration_created[index]))"))"
       fi
     done
+    for index in "${!specified_gray_suffix[@]}"; do original_labels[index]+=${specified_gray_suffix[index]}; done
     set -- "${original_labels[@]}"
     if [[ -n $screen_title ]]; then printf '%s\n\n' "$screen_title" >&2
     else printf '%s\n\n' "$banner" >&2; fi
@@ -187,6 +193,10 @@ function ez_menu_choose() (
       for index in "${!specified_accent_suffix[@]}"; do
         menu_accent_suffix[index]=${specified_accent_suffix[index]}
       done
+      for index in "${!specified_gray_suffix[@]}"; do
+        menu_gray_suffix[index]=${specified_gray_suffix[index]}
+        responsive_labels[index]+=${specified_gray_suffix[index]}
+      done
       printf -v now '%(%s)T' -1
       for ((index=0; index<count; index++)); do
         if [[ ${duration_created[index]+set} ]] && { [[ ${duration_mode[index]} == always ]] || (( index == selected && ! menu_back_focused )); }; then
@@ -195,9 +205,10 @@ function ez_menu_choose() (
           menu_gray_suffix[index]=$live_suffix
         fi
         label=${responsive_labels[index]}
-        if [[ $label == 'Codex: Resume ('* ]]; then
-          menu_accent_suffix[index]=${label#'Codex: Resume'}
-        fi
+        case $label in
+          'Codex: Resume ('*) menu_accent_suffix[index]=${label#'Codex: Resume'} ;;
+          'Codex: Start ('*) menu_accent_suffix[index]=${label#'Codex: Start'} ;;
+        esac
       done
       # Read the real terminal size: phone keyboards/app switching can change it.
       term_size=$(stty size <&2 2>/dev/null) || term_size=''
@@ -218,10 +229,12 @@ function ez_menu_choose() (
         menu_layout_labels=("${original_labels[@]}")
         for ((index=0; index<count; index++)); do
           label=${original_labels[index]}
-          if [[ $label == 'Codex: Resume ('* ]]; then
-            menu_layout_labels[index]='Codex: Resume'
-          fi
+          case $label in
+            'Codex: Resume ('*) menu_layout_labels[index]='Codex: Resume' ;;
+            'Codex: Start ('*) menu_layout_labels[index]='Codex: Start' ;;
+          esac
           [[ ${duration_created[index]+set} && ${duration_mode[index]} == always ]] && menu_layout_labels[index]+="${duration_prefix[index]}9999:23:59:59)"
+          [[ ${specified_gray_suffix[index]+set} ]] && menu_layout_labels[index]+=${specified_gray_suffix[index]}
         done
         set -- "${responsive_labels[@]}"
         if [[ -n $screen_title ]]; then

@@ -27,6 +27,8 @@ ez_codex_session_accounts() {
   ez_codex_accounts=()
   for ((i=0;i<${#ez_codex_ids[@]};i++)); do ez_codex_accounts[i]=personal; done
 }
+ez_codex_inactive_scan() { ez_inactive_ids=() ez_inactive_names=() ez_inactive_accounts=(); }
+ez_codex_session_idle() { return 1; }
 ez_menu_choose() {
   printf '%s\n' "$1" >> "$selection_file"
   local count
@@ -64,3 +66,27 @@ for scenario in existing new gone; do
   esac
 done
 printf 'PASS session focus follows the tmux ID after reorder or creation and resets after removal\n'
+
+ez_codex_session_idle() { [[ $1 == '$1' ]]; }
+ez_codex_inactive_scan() {
+  ez_inactive_ids=(12345678-1234-1234-1234-123456789abc)
+  ez_inactive_names=(Saved)
+  ez_inactive_accounts=(work)
+}
+ez_menu_choose() {
+  printf '%s\0' "$@" > "$test_root/ordered-args"
+  return 130
+}
+scenario=existing state=before
+ez_menu_codex_sessions
+mapfile -d '' -t ordered < "$test_root/ordered-args"
+labels=()
+found=0
+for entry in "${ordered[@]}"; do
+  if (( found )); then labels+=("$entry"); fi
+  [[ $entry == -- ]] && found=1
+done
+[[ ${labels[0]} == '[new session]' && ${labels[1]} == 'Beta   [personal]' &&
+   ${labels[2]} == 'Alpha* [personal]' && ${labels[3]} == 'Saved  [work]' ]]
+[[ " ${ordered[*]} " == *' --gray-suffix 3  (inactive) '* ]]
+printf 'PASS Sessions orders running, idle, then inactive and marks idle tmux sessions\n'

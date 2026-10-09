@@ -7,6 +7,7 @@ PATH=/usr/bin:/bin
 if [[ $1 == switcher_menu || $1 == switcher_ready || $1 == switcher_tmux ]]; then
   codex-switcher() {
     case $1 in
+      instances) printf '[]\n'; return 0 ;;
       ready)
         printf 'READY\n' >> "$TEST_SWITCHER_LOG"
         return "${TEST_SWITCHER_READY:-1}"
@@ -105,6 +106,12 @@ case $1 in
     EZ_MENU_ANIMATE_STARS=0
     now=$(printf '%(%s)T' -1)
     selected=$(ez_menu_choose 1 '' --screen-title 'Codex: Sessions' --live-duration 1 "$((now-5))" ' (' selected -- '[new session]' Alpha)
+    printf 'SELECTED=%s STATUS=%s\n' "$selected" "$?"
+    ;;
+  inactive_styling)
+    EZ_MENU_ANIMATE_STARS=0
+    selected=$(ez_menu_choose 0 '' --screen-title 'Codex: Sessions' \
+      --accent-suffix 0 ' [work]' --gray-suffix 0 ' (inactive)' -- 'Saved [work]' Other)
     printf 'SELECTED=%s STATUS=%s\n' "$selected" "$?"
     ;;
   name_cursor)

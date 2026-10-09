@@ -53,11 +53,99 @@ ez_codex_session_accounts() {
   done
 }
 
-ez_menu_has_codex() { ez_codex_scan; (( ${#ez_codex_ids[@]} > 0 )); }
+ez_codex_alias_file() {
+  printf '%s/satellite-cli/session-names.tsv' "${XDG_STATE_HOME:-$HOME/.local/state}"
+}
+ez_codex_alias_read() {
+  local wanted=$1 key alias file
+  REPLY=''
+  file=$(ez_codex_alias_file)
+  [[ -f $file ]] || return 1
+  while IFS=$'\t' read -r key alias; do
+    if [[ $key == "$wanted" ]]; then REPLY=$alias; return 0; fi
+  done < "$file"
+  return 1
+}
+ez_codex_alias_save() {
+  local wanted=$1 alias=$2 file dir temp key old
+  file=$(ez_codex_alias_file); dir=${file%/*}
+  (umask 077; mkdir -p -- "$dir") || return 1
+  temp=$(umask 077; mktemp -- "$dir/.session-names.XXXXXXXX") || return 1
+  if [[ -f $file ]]; then
+    while IFS=$'\t' read -r key old; do
+      [[ $key == "$wanted" ]] || printf '%s\t%s\n' "$key" "$old" >> "$temp"
+    done < "$file"
+  fi
+  printf '%s\t%s\n' "$wanted" "$alias" >> "$temp"
+  mv -f -- "$temp" "$file"
+}
+ez_codex_alias_delete() {
+  local wanted=$1 file dir temp key old
+  file=$(ez_codex_alias_file)
+  [[ -f $file ]] || return 0
+  dir=${file%/*}
+  temp=$(umask 077; mktemp -- "$dir/.session-names.XXXXXXXX") || return 1
+  while IFS=$'\t' read -r key old; do
+    [[ $key == "$wanted" ]] || printf '%s\t%s\n' "$key" "$old" >> "$temp"
+  done < "$file"
+  mv -f -- "$temp" "$file"
+}
+ez_codex_inactive_scan() {
+  local instances item thread cwd account home binary rollout reason name index fields i j temp
+  local -a ez_inactive_rank=()
+  ez_inactive_ids=() ez_inactive_names=() ez_inactive_accounts=() ez_inactive_cwds=()
+  ez_inactive_homes=() ez_inactive_binaries=() ez_inactive_rollouts=() ez_inactive_reasons=() ez_inactive_json=()
+  command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || return 0
+  instances=$(codex-switcher instances 2>/dev/null) || return 0
+  jq -e 'type == "array"' <<< "$instances" >/dev/null 2>&1 || return 0
+  while IFS= read -r item; do
+    mapfile -d '' -t fields < <(jq -jr \
+      '[.thread_id,.cwd,(.display_account // .account // "unknown"),.home,.binary,.rollout,(.block_reason // "")] | .[] | tostring + "\u0000"' <<< "$item")
+    (( ${#fields[@]} == 7 )) || continue
+    thread=${fields[0]} cwd=${fields[1]} account=${fields[2]} home=${fields[3]}
+    binary=${fields[4]} rollout=${fields[5]} reason=${fields[6]}
+    [[ $thread =~ ^[0-9a-fA-F-]{36}$ && $home == /* && -d $home ]] || continue
+    name=${cwd##*/}; [[ -n $name ]] || name=/
+    if ez_codex_alias_read "$thread"; then name=$REPLY
+    else name="$name (${thread:0:8})"; fi
+    index=${#ez_inactive_ids[@]}
+    ez_inactive_ids[index]=$thread ez_inactive_names[index]=$name ez_inactive_accounts[index]=$account
+    ez_inactive_cwds[index]=$cwd ez_inactive_homes[index]=$home ez_inactive_binaries[index]=$binary
+    ez_inactive_rollouts[index]=$rollout ez_inactive_reasons[index]=$reason ez_inactive_json[index]=$item
+    ez_inactive_rank[index]=$(stat -c %Y -- "$rollout" 2>/dev/null) || ez_inactive_rank[index]=0
+  done < <(jq -c '.[] | select(.inactive == true)' <<< "$instances")
+  # Saved conversations have no tmux attach timestamp; rollout mtime is their
+  # most recent activity, and keeps the same newest-first ordering as tmux.
+  for ((i=0;i<${#ez_inactive_ids[@]};i++)); do
+    for ((j=i+1;j<${#ez_inactive_ids[@]};j++)); do
+      if (( ez_inactive_rank[j] > ez_inactive_rank[i] )); then
+        for name in ez_inactive_ids ez_inactive_names ez_inactive_accounts ez_inactive_cwds \
+          ez_inactive_homes ez_inactive_binaries ez_inactive_rollouts ez_inactive_reasons \
+          ez_inactive_json ez_inactive_rank; do
+          local -n array=$name
+          temp=${array[i]} array[i]=${array[j]} array[j]=$temp
+          unset -n array
+        done
+      fi
+    done
+  done
+}
+
+ez_menu_has_codex() {
+  ez_codex_scan
+  (( ${#ez_codex_ids[@]} > 0 )) && return 0
+  ez_codex_inactive_scan
+  (( ${#ez_inactive_ids[@]} > 0 ))
+}
 ez_menu_codex_label() {
   ez_codex_scan
-  printf 'Codex: Resume'
-  (( ${#ez_codex_ids[@]} )) && printf ' (%s)' "${ez_codex_names[0]}"
+  if (( ${#ez_codex_ids[@]} )); then
+    printf 'Codex: Resume (%s)' "${ez_codex_names[0]}"
+  else
+    ez_codex_inactive_scan
+    printf 'Codex: Start'
+    (( ${#ez_inactive_ids[@]} )) && printf ' (%s)' "${ez_inactive_names[0]}"
+  fi
   return 0
 }
 ez_codex_attach() {
@@ -77,8 +165,11 @@ ez_codex_attach() {
 }
 ez_menu_codex() {
   ez_codex_scan
-  (( ${#ez_codex_ids[@]} )) || return 0
-  ez_codex_attach "${ez_codex_ids[0]}"
+  if (( ${#ez_codex_ids[@]} )); then ez_codex_attach "${ez_codex_ids[0]}"
+  else
+    ez_codex_inactive_scan
+    (( ${#ez_inactive_ids[@]} )) && ez_codex_resume_inactive "${ez_inactive_ids[0]}"
+  fi
 }
 ez_codex_duration() {
   local seconds=$1 days hours minutes
@@ -89,13 +180,19 @@ ez_codex_duration() {
   else printf '%d:%02d' "$minutes" "$seconds"; fi
 }
 ez_codex_valid_name() {
-  local candidate=$1 except=${2-} i
+  local candidate=$1 except=${2-} i key alias file
   [[ $candidate != switcher ]] || return 1
   ez_codex_name_chars "$candidate" || return 1
   ez_codex_scan
   for ((i=0;i<${#ez_codex_ids[@]};i++)); do
     [[ ${ez_codex_names[i]} == "$candidate" && ${ez_codex_ids[i]} != "$except" ]] && return 1
   done
+  file=$(ez_codex_alias_file)
+  if [[ -f $file ]]; then
+    while IFS=$'\t' read -r key alias; do
+      [[ $alias == "$candidate" && $key != "$except" ]] && return 1
+    done < "$file"
+  fi
   return 0
 }
 
@@ -166,6 +263,7 @@ ez_codex_input_line() {
   hint='Type a unique session name'
   [[ $kind == 'Start directory' ]] && hint='Type or navigate to a directory'
   [[ $kind == 'New directory name' ]] && hint='Type a new directory name'
+  [[ $kind == 'Move directory name' ]] && hint='Type the destination folder name'
   color=$C_RED; (( valid )) && color=$C_WHITE
   shown=${input//[[:cntrl:]]/?}
   (( width < 4 )) && width=4
@@ -217,6 +315,7 @@ ez_codex_field() (
   local -A stars_char stars_palette stars_saturation stars_birth stars_seen stars_rgb_cache
   local -A stars_text_char stars_text_style stars_text_fade stars_text_seen stars_text_flash stars_occluded
   local -A stars_hue_offset stars_cell_render stars_text_palette
+  [[ $kind == 'Move directory name' ]] && create_parent=$except
   [[ $kind == 'Start directory' ]] && menu_has_back=1
   if [[ ! -t 0 || ! -t 2 || ${TERM:-dumb} == dumb ]]; then
     while :; do
@@ -224,6 +323,11 @@ ez_codex_field() (
       IFS= read -r input || return 130
       if [[ $kind == 'Session name' ]]; then
         ez_codex_valid_name "$input" "$except" && { printf '%s' "$input"; return; }
+      elif [[ $kind == 'Move directory name' ]]; then
+        if ez_codex_new_dir_name_target "$create_parent" "$input" >/dev/null; then
+          printf '%s' "$input"
+          return
+        fi
       else
         resolved=$(ez_codex_resolve_dir "$input") && { printf '%s' "$resolved"; return; }
         if create_target=$(ez_codex_new_dir_target "$input"); then
@@ -261,7 +365,7 @@ ez_codex_field() (
       valid=0 creatable=0 resolved='' create_target=''
       if [[ $kind == 'Session name' ]]; then
         ez_codex_valid_name "$input" "$except" && valid=1
-      elif [[ $kind == 'New directory name' ]]; then
+      elif [[ $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
         create_target=$(ez_codex_new_dir_name_target "$create_parent" "$input") && valid=1
       else
         resolved=$(ez_codex_resolve_dir "$input") && valid=1
@@ -297,8 +401,9 @@ ez_codex_field() (
       labels=()
       if [[ $kind == 'Session name' ]]; then
         labels=('Continue')
-      elif [[ $kind == 'New directory name' ]]; then
-        labels=('Create directory')
+      elif [[ $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
+        if [[ $kind == 'Move directory name' ]]; then labels=('Continue')
+        else labels=('Create directory'); fi
       else
         labels=('Use this directory' 'Add new directory')
         for path in "${choices[@]}"; do
@@ -320,7 +425,7 @@ ez_codex_field() (
           if (( menu_enabled[i] )); then selected=$i; break; fi
         done
       fi
-      if [[ $kind == 'Session name' || $kind == 'New directory name' ]]; then
+      if [[ $kind == 'Session name' || $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
         mapfile -t hint_rows < <(ez_menu_hint_lines name 1 "$valid")
       else
         mapfile -t hint_rows < <(ez_menu_hint_lines directory "$count" "$((valid || creatable))")
@@ -439,14 +544,14 @@ ez_codex_field() (
                  frame=selection;;
             C) if (( menu_back_focused )); then
                  menu_back_focused=0; frame=selection
-               elif [[ $kind == 'Session name' || $kind == 'New directory name' ]]; then
+               elif [[ $kind == 'Session name' || $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
                  (( cursor < ${#input} )) && cursor=$((cursor+1))
                elif (( ${#choices[@]} )); then
                  (( selected<2 )) && selected=2
                  input=$(ez_codex_resolve_dir "${choices[selected-2]}") || continue
                  cursor=${#input} dirty=1
                fi;;
-            D) if [[ $kind == 'Session name' || $kind == 'New directory name' ]]; then
+            D) if [[ $kind == 'Session name' || $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
                  (( cursor > 0 )) && cursor=$((cursor-1))
                elif (( menu_back_focused )); then
                  frame=selection
@@ -476,6 +581,7 @@ ez_codex_field() (
         (( menu_back_focused )) && return 130
         if (( valid || creatable || (selected>1 && ${#choices[@]}>=selected-1) )); then
           if [[ $kind == 'Session name' ]]; then printf '%s' "$input"
+          elif [[ $kind == 'Move directory name' ]]; then printf '%s' "$input"
           elif [[ $kind == 'New directory name' ]]; then
             if mkdir -- "$create_target" 2>/dev/null; then
               ez_codex_resolve_expanded_dir "$create_target"
@@ -518,47 +624,615 @@ ez_codex_new() {
   ez_codex_new_id=$id
   ez_codex_attach "$id"
 }
+
+# Codex Switcher identifies the exact conversation and account home. A detached
+# tmux client is not sufficient evidence of idleness: also require a completed
+# rollout and no process owned by the Codex pane.
+ez_codex_move_info() {
+  local id=$1 session instances item pane_state panes events
+  command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 &&
+    command -v pgrep >/dev/null 2>&1 || return 1
+  session=$(tmux display-message -p -t "$id" '#{session_name}') || return 1
+  instances=$(codex-switcher instances 2>/dev/null) || return 1
+  item=$(jq -ec --arg session "$session" \
+    '[.[] | select(.inactive == false and .tmux_session == $session and .block_reason == null)] | if length == 1 then .[0] else empty end' \
+    <<< "$instances" 2>/dev/null) || return 1
+  mapfile -d '' -t ez_move_fields < <(jq -jr \
+    '[.pane,.pid,.start_time,.cwd,.thread_id,.rollout,.home,.binary] | .[] | tostring + "\u0000"' <<< "$item")
+  (( ${#ez_move_fields[@]} == 8 )) || return 1
+  [[ ${ez_move_fields[1]} =~ ^[0-9]+$ && ${ez_move_fields[2]} =~ ^[0-9]+$ &&
+     ${ez_move_fields[4]} =~ ^[0-9a-fA-F-]{36}$ &&
+     ${ez_move_fields[3]} == /* && ${ez_move_fields[5]} == /* &&
+     ${ez_move_fields[6]} == /* && -f ${ez_move_fields[5]} &&
+     -d ${ez_move_fields[6]} ]] || return 1
+  mapfile -d '' -t ez_move_options < <(jq -jr '.resume_options[] | . + "\u0000"' <<< "$item")
+  pane_state=$(tmux display-message -p -t "${ez_move_fields[0]}" \
+    '#{session_id}|#{session_attached}|#{pane_dead}|#{pane_pid}|#{pane_current_command}') || return 1
+  [[ $pane_state == "$id|0|0|${ez_move_fields[1]}|codex" ]] || return 1
+  panes=$(tmux list-panes -s -t "$id" -F '#{pane_id}') || return 1
+  [[ $panes == "${ez_move_fields[0]}" ]] || return 1
+  [[ -r /proc/${ez_move_fields[1]}/stat ]] || return 1
+  local proc_stat proc_fields
+  proc_stat=$(< "/proc/${ez_move_fields[1]}/stat")
+  read -ra proc_fields <<< "${proc_stat#*) }"
+  [[ ${proc_fields[19]-} == "${ez_move_fields[2]}" ]] || return 1
+  ez_codex_idle_children "${ez_move_fields[1]}" || return 1
+  ez_codex_rollout_complete "${ez_move_fields[5]}" || return 1
+  [[ -d ${ez_move_fields[3]} ]] || return 1
+  return 0
+}
+
+ez_codex_session_idle() {
+  local state pane process pid command
+  state=$(tmux display-message -p -t "$1" '#{session_attached}|#{pane_dead}' 2>/dev/null) || return 1
+  [[ $state == '0|1' ]] && return 0
+  [[ $state == '0|0' ]] || return 1
+  ez_codex_move_info "$1" && return 0
+  # Codex Switcher cannot always match a fresh CLI pane to its rollout. A
+  # detached pane at Codex's visible input prompt is still idle for display;
+  # Move keeps requiring the stronger verified-thread check above.
+  pane=$(tmux list-panes -s -t "$1" -F '#{pane_id}' 2>/dev/null) || return 1
+  [[ $pane == %* && $pane != *$'\n'* ]] || return 1
+  process=$(tmux display-message -p -t "$pane" '#{pane_pid}|#{pane_current_command}' 2>/dev/null) || return 1
+  pid=${process%%|*} command=${process#*|}
+  [[ $pid =~ ^[0-9]+$ && $command == codex ]] || return 1
+  ez_codex_idle_children "$pid" || return 1
+  tmux capture-pane -p -t "$pane" 2>/dev/null | rg -q '^› '
+}
+
+ez_codex_rollout_complete() {
+  local events
+  # Older rollouts may contain an invalid record from an interrupted write.
+  # A later task_complete is decisive; an invalid final record is not.
+  events=$(jq -Rr '
+    try fromjson catch {type:"invalid"} |
+    if .type == "invalid" then "invalid"
+    elif .type == "event_msg" then
+      .payload.type | select(. == "task_started" or . == "task_complete" or . == "turn_aborted")
+    else empty end' "$1" 2>/dev/null) || return 1
+  [[ ${events##*$'\n'} == task_complete ]]
+}
+
+# A resumed conversation should use its last recorded permissions. The
+# switcher supplies other launch flags, but saved conversations have none.
+ez_codex_build_resume_options() {
+  local rollout=$1 recorded approval='' sandbox='' option value bypass=0
+  shift
+  ez_resume_options=()
+  recorded=$(jq -Rr '
+    fromjson? | select(.type == "turn_context") |
+    [.payload.approval_policy, .payload.sandbox_policy.type] |
+    select((.[0] == "never" or .[0] == "on-request") and
+           (.[1] == "read-only" or .[1] == "workspace-write" or .[1] == "danger-full-access")) |
+    @tsv' "$rollout" 2>/dev/null | tail -n 1) || return 1
+  while (( $# )); do
+    option=$1
+    case $option in
+      --dangerously-bypass-approvals-and-sandbox|--full-auto|--approve-for-me)
+        bypass=1; shift ;;
+      -a|--ask-for-approval)
+        (( $# >= 2 )) || return 1
+        approval=$2; shift 2 ;;
+      -s|--sandbox)
+        (( $# >= 2 )) || return 1
+        sandbox=$2; shift 2 ;;
+      -c|--config)
+        (( $# >= 2 )) || return 1
+        value=$2
+        if [[ $value == approval_policy=* ]]; then approval=${value#*=}; approval=${approval//\"/}
+        elif [[ $value == sandbox_mode=* ]]; then sandbox=${value#*=}; sandbox=${sandbox//\"/}
+        else ez_resume_options+=("$option" "$value"); fi
+        shift 2 ;;
+      *) ez_resume_options+=("$option"); shift ;;
+    esac
+  done
+  if [[ -n $recorded ]]; then
+    IFS=$'\t' read -r approval sandbox <<< "$recorded"
+  elif (( bypass )); then
+    approval=never sandbox=danger-full-access
+  fi
+  [[ $approval == never || $approval == on-request ]] || approval=never
+  [[ $sandbox == read-only || $sandbox == workspace-write || $sandbox == danger-full-access ]] || sandbox=danger-full-access
+  ez_resume_options+=(--ask-for-approval "$approval" --sandbox "$sandbox")
+}
+
+ez_codex_idle_children() {
+  local parent=$1 child command
+  while IFS= read -r child; do
+    [[ -r /proc/$child/cmdline ]] || return 1
+    IFS= read -r -d '' command < "/proc/$child/cmdline" || return 1
+    [[ ${command##*/} == codex-code-mode-host ]] || return 1
+    ! pgrep -P "$child" >/dev/null 2>&1 || return 1
+  done < <(pgrep -P "$parent" || :)
+  return 0
+}
+
+ez_codex_process_start() {
+  local line parts
+  [[ -r /proc/$1/stat ]] || return 1
+  line=$(< "/proc/$1/stat")
+  read -ra parts <<< "${line#*) }"
+  REPLY=${parts[19]-}
+  [[ $REPLY =~ ^[0-9]+$ ]]
+}
+
+ez_codex_stop_idle_pane() {
+  local pane=$1 pid=$2 rollout=$3 child start attempt dead command
+  local -a helpers=() starts=()
+  ez_codex_idle_children "$pid" && ez_codex_rollout_complete "$rollout" || return 1
+  while IFS= read -r child; do
+    ez_codex_process_start "$child" || return 1
+    helpers+=("$child") starts+=("$REPLY")
+  done < <(pgrep -P "$pid" || :)
+  kill -TERM "$pid" || return 1
+  dead=0
+  for ((attempt=0;attempt<100;attempt++)); do
+    [[ $(tmux display-message -p -t "$pane" '#{pane_dead}') == 1 ]] && { dead=1; break; }
+    sleep 0.1
+  done
+  (( dead )) || return 1
+  for ((attempt=0;attempt<${#helpers[@]};attempt++)); do
+    child=${helpers[attempt]} start=${starts[attempt]}
+    if ez_codex_process_start "$child" && [[ $REPLY == "$start" ]]; then
+      IFS= read -r -d '' command < "/proc/$child/cmdline" || return 1
+      [[ ${command##*/} == codex-code-mode-host ]] || return 1
+      kill -TERM "$child" || return 1
+    fi
+  done
+  for ((attempt=0;attempt<50;attempt++)); do
+    local remaining=0 line parts
+    for ((child=0;child<${#helpers[@]};child++)); do
+      [[ -r /proc/${helpers[child]}/stat ]] || continue
+      line=$(< "/proc/${helpers[child]}/stat")
+      read -ra parts <<< "${line#*) }"
+      [[ ${parts[19]-} != "${starts[child]}" || ${parts[0]-} == Z ]] || remaining=1
+    done
+    (( remaining )) || break
+    sleep 0.1
+  done
+  (( remaining == 0 )) || return 1
+  ez_codex_rollout_complete "$rollout"
+}
+
+ez_codex_movable_root() {
+  local source=$1 parent
+  [[ -d $source && ! -L $source && $source != / && $source != "$HOME" ]] || return 1
+  parent=${source%/*}; [[ -n $parent ]] || parent=/
+  [[ -w $parent && -x $parent ]] || return 1
+  [[ $(stat -c %d -- "$source") == "$(stat -c %d -- "$parent")" ]] || return 1
+  [[ $(ez_codex_resolve_expanded_dir "$source") == "$source" ]]
+}
+
+ez_codex_move_bar() {
+  local percent=$1 label=$2 filled empty
+  (( percent < 0 )) && percent=0
+  (( percent > 100 )) && percent=100
+  printf -v filled '%*s' "$((percent/5))" ''
+  printf -v empty '%*s' "$((20-percent/5))" ''
+  printf '\r\033[2K  %-24s [%s%s] %3d%%' "$label" "${filled// /█}" "${empty// /░}" "$percent" >&2
+}
+
+ez_codex_move_respawn() {
+  local pane=$1 dir=$2 home=$3 binary=$4 thread=$5
+  shift 5
+  local CODEX_HOME=$home
+  local -a environment pane_command
+  ez_menu_launch_environment
+  ez_menu_pane_command 1 "$binary" resume "$thread" -C "$dir" "$@"
+  tmux respawn-pane -t "$pane" -c "$dir" "${environment[@]}" "${pane_command[@]}"
+}
+
+ez_codex_restore_remain_on_exit() {
+  local pane=$1 previous=$2
+  if [[ -n $previous ]]; then
+    tmux set-option -p -t "$pane" remain-on-exit "$previous"
+  else
+    tmux set-option -pu -t "$pane" remain-on-exit
+  fi
+}
+
+ez_codex_move_execute() {
+  local id=$1 source=$2 target=$3 physical=$4
+  local pane=${ez_move_fields[0]} pid=${ez_move_fields[1]} start=${ez_move_fields[2]}
+  local thread=${ez_move_fields[4]} rollout=${ez_move_fields[5]} home=${ez_move_fields[6]} binary=${ez_move_fields[7]}
+  local -a options=("${ez_move_options[@]}")
+  local parent=${target%/*} stage='' source_device target_device size available status=0 old_remain target_created=0
+  [[ -n $parent ]] || parent=/
+  ez_codex_build_resume_options "$rollout" "${options[@]}" || return 1
+  options=("${ez_resume_options[@]}")
+  [[ -d $parent && -w $parent && -x $parent ]] || return 1
+  (( physical )) || [[ -d $target && -w $target && -x $target ]] || return 1
+  if (( physical )); then
+    [[ ! -e $target && ! -L $target && $target != "$source" && $parent != "$source" && $parent != "$source/"* ]] || return 1
+    ez_codex_movable_root "$source" || return 1
+    source_device=$(stat -c %d -- "$source") || return 1
+    target_device=$(stat -c %d -- "$parent") || return 1
+    if [[ $source_device != "$target_device" ]]; then
+      command -v rsync >/dev/null 2>&1 || return 1
+      size=$(du -sb -- "$source" | cut -f1) || return 1
+      available=$(df -B1 --output=avail -- "$parent" | tail -n 1) || return 1
+      [[ $size =~ ^[0-9]+$ && $available =~ ^[0-9]+$ ]] || return 1
+      (( available > size + size/20 + 1048576 )) || { printf 'Not enough space at destination.\n' >&2; return 1; }
+    fi
+  fi
+  # Recheck after the user has picked a path. Refuse a changed pane or turn.
+  ez_codex_move_info "$id" || return 1
+  [[ ${ez_move_fields[0]} == "$pane" && ${ez_move_fields[1]} == "$pid" &&
+     ${ez_move_fields[2]} == "$start" && ${ez_move_fields[4]} == "$thread" &&
+     ${ez_move_fields[3]} == "$source" && ${ez_move_fields[5]} == "$rollout" &&
+     ${ez_move_fields[6]} == "$home" ]] || return 1
+  old_remain=$(tmux show-options -p -v -t "$pane" remain-on-exit 2>/dev/null) || return 1
+  tmux set-option -p -t "$pane" remain-on-exit on || return 1
+  printf '\033[H\033[2J  Moving session to %s\n\n' "$target" >&2
+  ez_codex_move_bar 0 'Preparing session'
+  if ! ez_codex_stop_idle_pane "$pane" "$pid" "$rollout"; then
+    if [[ $(tmux display-message -p -t "$pane" '#{pane_dead}') == 1 ]]; then
+      ez_codex_move_respawn "$pane" "$source" "$home" "$binary" "$thread" "${options[@]}"
+    fi
+    ez_codex_restore_remain_on_exit "$pane" "$old_remain"
+    printf '\nCodex changed or could not stop; the original session remains available.\n' >&2
+    return 1
+  fi
+  if (( physical )); then
+    if [[ $source_device == "$target_device" ]]; then
+      ez_codex_move_bar 40 'Moving folder'
+      if mv -T -- "$source" "$target"; then target_created=1; else status=1; fi
+    else
+      stage=$(mktemp -d -- "$parent/.satellite-move.XXXXXXXX") || status=1
+      if (( ! status )); then
+        if (set -o pipefail
+          rsync -aHAX --numeric-ids --info=progress2 --no-inc-recursive -- "$source/" "$stage/" 2>&1 |
+            tr '\r' '\n' | while IFS= read -r line; do
+              if [[ $line =~ ([0-9]{1,3})% ]]; then ez_codex_move_bar "${BASH_REMATCH[1]}" 'Copying files'; fi
+            done
+        ); then :; else status=1; fi
+        if (( ! status )) && mv -T -- "$stage" "$target"; then
+          target_created=1 stage=''
+        else status=1; fi
+      fi
+    fi
+  fi
+  if (( ! status )); then
+    ez_codex_move_bar 95 'Resuming conversation'
+    ez_codex_move_respawn "$pane" "$target" "$home" "$binary" "$thread" "${options[@]}" || status=1
+    if (( ! status )); then
+      sleep 0.5
+      [[ $(tmux display-message -p -t "$pane" '#{pane_dead}') == 0 ]] || status=1
+    fi
+  fi
+  if (( status )); then
+    if (( target_created )) && [[ -e $target ]]; then
+      if [[ $source_device == "$target_device" ]]; then mv -T -- "$target" "$source"
+      else rm -rf -- "$target"; fi
+    fi
+    [[ -z $stage ]] || rm -rf -- "$stage"
+    [[ $(tmux display-message -p -t "$pane" '#{pane_dead}') == 1 ]] &&
+      ez_codex_move_respawn "$pane" "$source" "$home" "$binary" "$thread" "${options[@]}"
+    ez_codex_restore_remain_on_exit "$pane" "$old_remain"
+    printf '\nMove failed. The original directory and conversation were restored.\n' >&2
+    return 1
+  fi
+  if (( physical )) && [[ $source_device != "$target_device" ]]; then
+    rm -rf -- "$source" || { printf '\nSession moved, but the original folder could not be removed: %s\n' "$source" >&2; return 1; }
+  fi
+  ez_codex_restore_remain_on_exit "$pane" "$old_remain"
+  ez_codex_move_bar 100 'Move complete'
+  printf '\n' >&2
+}
+
+ez_codex_choose_move_target() {
+  local source=$1 mode parent name
+  ez_move_physical=0 ez_move_target=''
+  if ez_codex_movable_root "$source"; then
+    mode=$(ez_menu_choose 0 '' --screen-title 'Move Session' -- 'Redefine root directory' 'Move root folder') || return 130
+  else
+    mode=$(ez_menu_choose 0 '' --screen-title 'Move Session' --disabled '1' -- 'Redefine root directory' 'Move root folder') || return 130
+  fi
+  if (( mode == 0 )); then
+    ez_move_target=$(ez_codex_field 'Start directory' "$source") || return 130
+    [[ $ez_move_target != "$source" && -w $ez_move_target ]] || return 130
+  else
+    ez_move_physical=1
+    parent=${source%/*}; [[ -n $parent ]] || parent=/
+    parent=$(ez_codex_field 'Start directory' "$parent") || return 130
+    name=$(ez_codex_field 'Move directory name' "${source##*/}" "$parent") || return 130
+    ez_move_target=$(ez_codex_new_dir_name_target "$parent" "$name") || return 1
+  fi
+}
+ez_codex_move() {
+  local id=$1 source
+  ez_codex_move_info "$id" || return 1
+  source=$(ez_codex_resolve_expanded_dir "${ez_move_fields[3]}") || return 1
+  ez_codex_choose_move_target "$source" || return 0
+  ez_codex_move_execute "$id" "$source" "$ez_move_target" "$ez_move_physical"
+}
+
+ez_codex_inactive_info() {
+  local thread=$1 index
+  ez_codex_inactive_scan
+  for ((index=0;index<${#ez_inactive_ids[@]};index++)); do
+    if [[ ${ez_inactive_ids[index]} == "$thread" ]]; then
+      ez_inactive_selected=$index
+      return 0
+    fi
+  done
+  return 1
+}
+
+ez_codex_resume_inactive() {
+  local thread=$1 dir=${2-} attach=${3:-1} allow_relocated=${4:-0} index name id item binary home
+  local CODEX_HOME
+  local -a environment pane_command options
+  ez_codex_inactive_info "$thread" || return 1
+  index=$ez_inactive_selected
+  [[ ( -z ${ez_inactive_reasons[index]} || $allow_relocated == 1 ) && -f ${ez_inactive_rollouts[index]} ]] || return 1
+  ez_codex_rollout_complete "${ez_inactive_rollouts[index]}" || return 1
+  [[ -n $dir ]] || dir=${ez_inactive_cwds[index]}
+  [[ -d $dir && -w $dir && -x $dir ]] || return 1
+  home=${ez_inactive_homes[index]} binary=${ez_inactive_binaries[index]}
+  [[ -n $binary ]] || binary=codex
+  item=${ez_inactive_json[index]}
+  mapfile -d '' -t options < <(jq -jr '.resume_options[]? | . + "\u0000"' <<< "$item")
+  ez_codex_build_resume_options "${ez_inactive_rollouts[index]}" "${options[@]}" || return 1
+  options=("${ez_resume_options[@]}")
+  if ez_codex_alias_read "$thread" && ez_codex_name_chars "$REPLY"; then name=$REPLY
+  else name=$thread; fi
+  if tmux has-session -t "=codex-$name" 2>/dev/null; then name=$thread; fi
+  tmux has-session -t "=codex-$name" 2>/dev/null && return 1
+  CODEX_HOME=$home
+  ez_menu_launch_environment
+  ez_menu_pane_command 1 "$binary" resume "$thread" -C "$dir" "${options[@]}"
+  id=$(tmux new-session -d -P -F '#{session_id}' -s "codex-$name" -c "$dir" \
+    "${environment[@]}" "${pane_command[@]}") || return 1
+  ez_codex_new_id=$id
+  sleep 0.5
+  if [[ $(tmux display-message -p -t "$id" '#{pane_dead}') == 1 ]]; then
+    (( attach )) && ez_codex_attach "$id"
+    return 1
+  fi
+  (( attach )) && ez_codex_attach "$id"
+  return 0
+}
+
+ez_codex_move_inactive_execute() {
+  local thread=$1 source=$2 target=$3 physical=$4
+  local parent=${target%/*} source_device='' target_device='' size available stage='' status=0 target_created=0
+  local original_id='' original_rollout original_home
+  [[ -n $parent ]] || parent=/
+  [[ -d $parent && -w $parent && -x $parent ]] || return 1
+  if (( physical )); then
+    ez_codex_movable_root "$source" || return 1
+    [[ ! -e $target && ! -L $target && $target != "$source" && $parent != "$source" && $parent != "$source/"* ]] || return 1
+    source_device=$(stat -c %d -- "$source") || return 1
+    target_device=$(stat -c %d -- "$parent") || return 1
+    if [[ $source_device != "$target_device" ]]; then
+      command -v rsync >/dev/null 2>&1 || return 1
+      size=$(du -sb -- "$source" | cut -f1) || return 1
+      available=$(df -B1 --output=avail -- "$parent" | tail -n 1) || return 1
+      [[ $size =~ ^[0-9]+$ && $available =~ ^[0-9]+$ ]] || return 1
+      (( available > size + size/20 + 1048576 )) || { printf 'Not enough space at destination.\n' >&2; return 1; }
+    fi
+  else
+    [[ -d $target && -w $target && -x $target ]] || return 1
+  fi
+  ez_codex_inactive_info "$thread" || return 1
+  [[ -z ${ez_inactive_reasons[ez_inactive_selected]} &&
+     ${ez_inactive_cwds[ez_inactive_selected]} == "$source" ]] || return 1
+  original_rollout=${ez_inactive_rollouts[ez_inactive_selected]}
+  original_home=${ez_inactive_homes[ez_inactive_selected]}
+  ez_codex_rollout_complete "$original_rollout" || return 1
+  printf '\033[H\033[2J  Moving saved conversation to %s\n\n' "$target" >&2
+  ez_codex_move_bar 0 'Preparing session'
+  if (( physical )); then
+    if [[ $source_device == "$target_device" ]]; then
+      ez_codex_move_bar 40 'Moving folder'
+      if mv -T -- "$source" "$target"; then target_created=1; else status=1; fi
+    else
+      stage=$(mktemp -d -- "$parent/.satellite-move.XXXXXXXX") || status=1
+      if (( ! status )); then
+        if (set -o pipefail
+          rsync -aHAX --numeric-ids --info=progress2 --no-inc-recursive -- "$source/" "$stage/" 2>&1 |
+            tr '\r' '\n' | while IFS= read -r line; do
+              if [[ $line =~ ([0-9]{1,3})% ]]; then ez_codex_move_bar "${BASH_REMATCH[1]}" 'Copying files'; fi
+            done
+        ); then :; else status=1; fi
+        if (( ! status )) && mv -T -- "$stage" "$target"; then
+          target_created=1 stage=''
+        else status=1; fi
+      fi
+    fi
+  fi
+  if (( ! status )); then
+    ez_codex_move_bar 95 'Starting conversation'
+    ez_codex_new_id=''
+    ez_codex_resume_inactive "$thread" "$target" 0 1 || status=1
+    original_id=${ez_codex_new_id:-}
+  fi
+  if (( status )); then
+    [[ -z $original_id ]] || tmux kill-session -t "$original_id" 2>/dev/null || :
+    if (( target_created )) && [[ -e $target ]]; then
+      if [[ $source_device == "$target_device" ]]; then mv -T -- "$target" "$source"
+      else rm -rf -- "$target"; fi
+    fi
+    [[ -z $stage ]] || rm -rf -- "$stage"
+    printf '\nMove failed. The saved conversation and original directory remain available.\n' >&2
+    return 1
+  fi
+  if (( physical )) && [[ $source_device != "$target_device" ]]; then
+    rm -rf -- "$source" || { printf '\nConversation started, but the original folder could not be removed: %s\n' "$source" >&2; return 1; }
+  fi
+  ez_codex_move_bar 100 'Move complete'
+  printf '\n' >&2
+  ez_codex_attach "$original_id"
+}
+
+ez_codex_move_inactive() {
+  local thread=$1 source
+  ez_codex_inactive_info "$thread" || return 1
+  source=${ez_inactive_cwds[ez_inactive_selected]}
+  [[ $source == /* && -z ${ez_inactive_reasons[ez_inactive_selected]} ]] || return 1
+  ez_codex_choose_move_target "$source" || return 0
+  ez_codex_move_inactive_execute "$thread" "$source" "$ez_move_target" "$ez_move_physical"
+}
+
+ez_codex_inactive_actions() {
+  local thread=$1 name=$2 account=$3 selected replacement
+  local -a disabled=()
+  ez_codex_inactive_info "$thread" || return 0
+  if [[ -n ${ez_inactive_reasons[ez_inactive_selected]} ]] ||
+     ! ez_codex_rollout_complete "${ez_inactive_rollouts[ez_inactive_selected]}"; then
+    disabled=(--disabled '0 2' --disabled-note 0 '(unavailable)' --disabled-note 2 '(unavailable)')
+  fi
+  [[ ${ez_inactive_reasons[ez_inactive_selected]} == busy ]] && disabled+=(--disabled '3' --disabled-note 3 '(busy)')
+  selected=$(ez_menu_choose 0 '' --screen-title "$name [$account] (inactive)" "${disabled[@]}" -- Start Rename Move Delete) || return 0
+  case $selected in
+    0) ez_codex_new_id=''; ez_codex_resume_inactive "$thread";;
+    1) replacement=$(ez_codex_field 'Session name' "$name" "$thread") || return 0
+       ez_codex_valid_name "$replacement" "$thread" && ez_codex_alias_save "$thread" "$replacement";;
+    2) ez_codex_move_inactive "$thread";;
+    3) ez_codex_delete_inactive "$thread" "$name";;
+  esac
+}
+
+ez_codex_delete_inactive() {
+  local thread=$1 name=$2 choice home
+  choice=$(ez_menu_choose 0 '' --screen-title "Delete $name?" -- 'Delete conversation') || return 0
+  (( choice == 0 )) || return 0
+  ez_codex_inactive_info "$thread" || return 1
+  [[ ${ez_inactive_reasons[ez_inactive_selected]} != busy ]] || return 1
+  home=${ez_inactive_homes[ez_inactive_selected]}
+  CODEX_HOME=$home codex delete --force "$thread" || return 1
+  ez_codex_alias_delete "$thread"
+}
+
+ez_codex_terminate() {
+  local id=$1 pane pid rollout source home binary thread old_remain instances
+  local -a options=()
+  ez_codex_move_info "$id" || return 1
+  pane=${ez_move_fields[0]} pid=${ez_move_fields[1]} source=${ez_move_fields[3]}
+  thread=${ez_move_fields[4]} rollout=${ez_move_fields[5]}
+  home=${ez_move_fields[6]} binary=${ez_move_fields[7]}
+  options=("${ez_move_options[@]}")
+  ez_codex_build_resume_options "$rollout" "${options[@]}" || return 1
+  options=("${ez_resume_options[@]}")
+  old_remain=$(tmux show-options -p -v -t "$pane" remain-on-exit 2>/dev/null) || return 1
+  tmux set-option -p -t "$pane" remain-on-exit on || return 1
+  if ! ez_codex_stop_idle_pane "$pane" "$pid" "$rollout"; then
+    if [[ $(tmux display-message -p -t "$pane" '#{pane_dead}') == 1 ]]; then
+      ez_codex_move_respawn "$pane" "$source" "$home" "$binary" "$thread" "${options[@]}"
+    fi
+    ez_codex_restore_remain_on_exit "$pane" "$old_remain"
+    return 1
+  fi
+  instances=$(codex-switcher instances 2>/dev/null) || instances=''
+  if ! jq -e --arg thread "$thread" \
+    'any(.[]; .inactive == true and .thread_id == $thread)' <<< "$instances" >/dev/null 2>&1; then
+    ez_codex_move_respawn "$pane" "$source" "$home" "$binary" "$thread" "${options[@]}"
+    ez_codex_restore_remain_on_exit "$pane" "$old_remain"
+    printf 'Conversation did not become inactive; the tmux session was restored.\n' >&2
+    return 1
+  fi
+  tmux kill-session -t "$id"
+}
+
 ez_codex_actions() {
-  local id=$1 name=$2 created=$3 account=${4:-unknown} selected replacement
-  selected=$(ez_menu_choose 0 '' --screen-title "$name [$account]" --live-duration 0 "$created" ' (active for ' always -- Resume Rename Terminate) || return 0
+  local id=$1 name=$2 created=$3 account=${4:-unknown} selected replacement title
+  local -a move_args=()
+  title="$name [$account]"
+  ez_codex_session_idle "$id" && title="$name* [$account]"
+  ez_codex_move_info "$id" || move_args=(--disabled '2 3' --disabled-note 2 '(active or unavailable)' --disabled-note 3 '(active or unavailable)')
+  selected=$(ez_menu_choose 0 '' --screen-title "$title" --live-duration 0 "$created" ' (active for ' always "${move_args[@]}" -- Resume Rename Move Terminate) || return 0
   case $selected in
     0) ez_codex_attach "$id";;
     1) replacement=$(ez_codex_field 'Session name' "$name" "$id") || return 0
        ez_codex_valid_name "$replacement" "$id" && tmux rename-session -t "$id" "codex-$replacement";;
-    2) tmux kill-session -t "$id";;
+    2) ez_codex_move "$id";;
+    3) ez_codex_terminate "$id";;
   esac
 }
 ez_menu_codex_sessions() {
-  local selected=0 index selected_id=''
+  local selected=0 index position live_count chosen selected_key='' thread name account_pad account_column=0
   local -a ez_codex_ids ez_codex_names ez_codex_created ez_codex_rank ez_codex_accounts uptime_args session_labels
+  local -a ez_inactive_ids ez_inactive_names ez_inactive_accounts ez_inactive_cwds ez_inactive_homes
+  local -a ez_inactive_binaries ez_inactive_rollouts ez_inactive_reasons ez_inactive_json
+  local -a live_order=() live_idle=() running_order=() idle_order=()
   while :; do
     ez_codex_scan
-    if [[ -n $selected_id ]]; then
+    live_count=${#ez_codex_ids[@]}
+    running_order=() idle_order=() live_idle=()
+    for ((index=0;index<live_count;index++)); do
+      if ez_codex_session_idle "${ez_codex_ids[index]}"; then
+        live_idle[index]=1
+        idle_order+=("$index")
+      else
+        live_idle[index]=0
+        running_order+=("$index")
+      fi
+    done
+    live_order=("${running_order[@]}" "${idle_order[@]}")
+    ez_codex_inactive_scan
+    if [[ -n $selected_key ]]; then
       selected=0
-      for ((index=0;index<${#ez_codex_ids[@]};index++)); do
-        if [[ ${ez_codex_ids[index]} == "$selected_id" ]]; then
-          selected=$((index+1))
-          break
-        fi
-      done
+      if [[ $selected_key == t:* ]]; then
+        for ((position=0;position<live_count;position++)); do
+          index=${live_order[position]}
+          if [[ ${ez_codex_ids[index]} == "${selected_key#t:}" ]]; then
+            selected=$((position+1)); break
+          fi
+        done
+      else
+        for ((index=0;index<${#ez_inactive_ids[@]};index++)); do
+          if [[ ${ez_inactive_ids[index]} == "${selected_key#i:}" ]]; then
+            selected=$((live_count+index+1)); break
+          fi
+        done
+      fi
     fi
-    (( selected > ${#ez_codex_ids[@]} )) && selected=0
+    (( selected > live_count + ${#ez_inactive_ids[@]} )) && selected=0
     ez_codex_session_accounts
+    account_column=0
+    for ((position=0;position<live_count;position++)); do
+      index=${live_order[position]}
+      name=${ez_codex_names[index]}
+      (( live_idle[index] )) && name+='*'
+      (( ${#name} > account_column )) && account_column=${#name}
+    done
+    for name in "${ez_inactive_names[@]}"; do
+      (( ${#name} > account_column )) && account_column=${#name}
+    done
     uptime_args=() session_labels=()
-    for ((index=0;index<${#ez_codex_ids[@]};index++)); do
-      uptime_args+=(--live-duration "$((index+1))" "${ez_codex_created[index]}" ' (' selected)
-      uptime_args+=(--accent-suffix "$((index+1))" " [${ez_codex_accounts[index]}]")
-      session_labels+=("${ez_codex_names[index]} [${ez_codex_accounts[index]}]")
+    for ((position=0;position<live_count;position++)); do
+      index=${live_order[position]}
+      name=${ez_codex_names[index]}
+      (( live_idle[index] )) && name+='*'
+      printf -v account_pad '%*s' "$((account_column - ${#name}))" ''
+      uptime_args+=(--live-duration "$((position+1))" "${ez_codex_created[index]}" ' (' selected)
+      uptime_args+=(--accent-suffix "$((position+1))" "$account_pad [${ez_codex_accounts[index]}]")
+      session_labels+=("$name$account_pad [${ez_codex_accounts[index]}]")
+    done
+    for ((index=0;index<${#ez_inactive_ids[@]};index++)); do
+      name=${ez_inactive_names[index]}
+      printf -v account_pad '%*s' "$((account_column - ${#name}))" ''
+      uptime_args+=(--accent-suffix "$((live_count+index+1))" "$account_pad [${ez_inactive_accounts[index]}]")
+      uptime_args+=(--gray-suffix "$((live_count+index+1))" ' (inactive)')
+      session_labels+=("$name$account_pad [${ez_inactive_accounts[index]}]")
     done
     selected=$(ez_menu_choose "$selected" '' --screen-title 'Codex: Sessions' "${uptime_args[@]}" -- '[new session]' "${session_labels[@]}") || return 0
     if (( selected==0 )); then
       ez_codex_new_id=''
       ez_codex_new
-      selected_id=$ez_codex_new_id
-    else
-      index=$((selected-1))
-      selected_id=${ez_codex_ids[index]}
+      selected_key=t:$ez_codex_new_id
+    elif (( selected <= live_count )); then
+      index=${live_order[selected-1]}
+      selected_key=t:${ez_codex_ids[index]}
       ez_codex_actions "${ez_codex_ids[index]}" "${ez_codex_names[index]}" "${ez_codex_created[index]}" "${ez_codex_accounts[index]}"
+    else
+      index=$((selected-live_count-1))
+      thread=${ez_inactive_ids[index]}
+      selected_key=i:$thread
+      ez_codex_new_id=''
+      ez_codex_inactive_actions "$thread" "${ez_inactive_names[index]}" "${ez_inactive_accounts[index]}"
+      [[ -n $ez_codex_new_id ]] && selected_key=t:$ez_codex_new_id
     fi
   done
 }

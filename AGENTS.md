@@ -24,6 +24,9 @@ existing function names, and the module split (`init`, `menu`, `select`,
   explicit Codex launch options, and `cxr` behavior. Return to the appropriate
   menu after detach with the same session selected. Preserve the switcher's
   account/home distinction; use `display_account` only for display.
+- Keep inactive conversations visible across switcher accounts; preserve exact
+  thread IDs and homes on Start/Move. Never terminate an unfinished turn or
+  delete a conversation through the tmux Terminate action.
 - Keep the alternate screen, cursor, focus, and exact terminal-mode cleanup on
   return and signals. Suppress input echo throughout rendering as well as reads.
 
@@ -52,7 +55,8 @@ existing function names, and the module split (`init`, `menu`, `select`,
   focused regression check for new behavior. Run `bash tests/stars.bash` for
   animation changes; use simulated times instead of sleeps. Run the relevant
   `tests/switcher.bash`, `tests/session_focus.bash`, or `tests/launch.bash` for
-  session changes.
+  session changes; run `tests/move.bash` and `tests/move_tmux.bash` for
+  move/inactive changes.
 - Stub tmux/Codex or use isolated test sockets. Never attach, resume, or
   terminate the user's live sessions or jobs in tests.
 - For performance work, use `tools/benchmark.bash`,

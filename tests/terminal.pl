@@ -193,6 +193,17 @@ die 'unselected session did not revert to its plain name' unless $unselected_dur
 send_keys("\e");
 finish();
 print "PASS selected session uptime increments and disappears on selection change\n";
+start_case('inactive_styling');
+expect(qr/Saved.*\(inactive\)/,'persistent inactive label');
+die 'selected inactive suffix is not gray' unless $buf =~ /\e\[38;5;250m \(inactive\)\e\[0m/;
+my $inactive_offset=length $buf;
+send_keys("\e[B");
+die 'inactive suffix disappeared on selection change' unless substr($buf,$inactive_offset) =~ /\e\[38;5;250m \(inactive\)\e\[0m/;
+send_keys("\e[A\e[D");
+die 'inactive suffix disappeared on Back focus' unless plain($buf) =~ /Saved \[work\] \(inactive\)/;
+send_keys("\e");
+finish();
+print "PASS inactive suffix stays gray and visible across selection and Back focus\n";
 start_case('duration_static');
 expect(qr/Alpha/,'static duration menu');
 pump(0.2);

@@ -11,13 +11,13 @@ export LC_ALL=C
 tmux() { "$tmux_binary" -S "$socket" -f /dev/null "$@"; }
 trap 'tmux list-panes -a -F "#{session_name} #{pane_id} #{pane_dead} #{pane_dead_status} #{pane_start_command}"; tmux capture-pane -p -t codex-failed: -S -100 2>/dev/null || :' ERR
 mkdir -p "$test_root/bin with spaces" "$test_root/project with spaces;\$(literal)"
-cat > "$test_root/bin with spaces/codex" <<'SH'
+cat > "$test_root/bin with spaces/codex-switcher" <<'SH'
 #!/bin/sh
 printf '%s\n' "$$" "$PWD" "$PATH" "${CODEX_HOME-unset}" "${CODEX_SWITCHER_HOME-unset}" "$@" "$TERM" > launch.txt
 printf 'FAKE_CODEX_STARTUP_FAILURE\n'
 exit 42
 SH
-chmod +x "$test_root/bin with spaces/codex"
+chmod +x "$test_root/bin with spaces/codex-switcher"
 # Seed stale server values before setting the caller's environment.
 CODEX_HOME=stale CODEX_SWITCHER_HOME=stale tmux new-session -d -s fixture /bin/sleep 120
 tmux set-option -g default-terminal satellite-missing-terminfo
@@ -31,6 +31,7 @@ ez_codex_field() {
 }
 # Check the created pane instead of attaching a real terminal.
 ez_codex_attach() { created_id=$1; }
+ez_codex_choose_account() { printf personal; }
 test_name=failed
 ez_codex_new
 [[ $ez_codex_new_id == "$created_id" ]]
@@ -44,9 +45,7 @@ mapfile -t launch < "$test_root/project with spaces;\$(literal)/launch.txt"
 [[ ${launch[0]} == "$(tmux display-message -p -t "$created_id:" '#{pane_pid}')" ]]
 [[ ${launch[1]} == "$test_root/project with spaces;\$(literal)" ]]
 [[ ${launch[2]} == "$PATH" && ${launch[3]} == "$CODEX_HOME" && ${launch[4]} == "$CODEX_SWITCHER_HOME" ]]
-[[ ${launch[5]} == --dangerously-bypass-approvals-and-sandbox && ${launch[6]} == xterm-256color && ${#launch[@]} == 7 ]]
-ez_codex_scan
-[[ ${ez_codex_names[*]} == failed ]]
+[[ ${launch[5]} == run && ${launch[6]} == --account && ${launch[7]} == personal && ${launch[8]} == -- && ${launch[9]} == --dangerously-bypass-approvals-and-sandbox && ${launch[10]} == xterm-256color && ${#launch[@]} == 11 ]]
 printf 'PASS failed launch preserves diagnostics, pane PID, directory, flags and current configuration homes\n'
 unset CODEX_HOME CODEX_SWITCHER_HOME
 tmux set-option -g default-terminal xterm
@@ -58,10 +57,19 @@ for ((attempt=0;attempt<100;attempt++)); do
 done
 mapfile -t launch < "$test_root/project with spaces;\$(literal)/launch.txt"
 [[ ${launch[3]} == unset && ${launch[4]} == unset ]]
-[[ ${launch[6]} == xterm ]]
+[[ ${launch[10]} == xterm ]]
 printf 'PASS unset homes clear stale settings and supported terminal types stay unchanged\n'
+thread=12345678-1234-1234-1234-123456789abc
+ez_codex_launch saved "$test_root/project with spaces;\$(literal)" work "$thread"
+for ((attempt=0;attempt<100;attempt++)); do
+  [[ $(tmux display-message -p -t "$created_id:" '#{pane_dead}') == 1 ]] && break
+  sleep 0.02
+done
+mapfile -t launch < "$test_root/project with spaces;\$(literal)/launch.txt"
+[[ ${launch[5]} == run && ${launch[7]} == work && ${launch[8]} == --thread && ${launch[9]} == "$thread" ]]
+printf 'PASS saved launch delegates exact thread and account without overriding recorded permissions\n'
 # Normal successful exits should still remove the session.
-printf '#!/bin/sh\nexit 0\n' > "$test_root/bin with spaces/codex"
+printf '#!/bin/sh\nexit 0\n' > "$test_root/bin with spaces/codex-switcher"
 test_name=success
 ez_codex_new
 for ((attempt=0;attempt<100;attempt++)); do

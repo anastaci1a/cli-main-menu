@@ -21,10 +21,9 @@ startup
 ```
 
 Sourcing the file only defines commands; it does not open the menu. Bash 4+,
-`date`, `stty`, and `clear` are required. Codex sessions need `tmux` and `codex`.
-The dashboard and saved-conversation list need `codex-switcher`; `jq` enables
-their account labels and Move actions. Status checks use `tac`; moving a folder
-across filesystems also needs `rsync`.
+`date`, `stty`, and `clear` are required. Codex integration needs `tmux`, `jq`,
+and a current `codex-switcher` with enrolled accounts. Keep the same
+`CODEX_SWITCHER_HOME` in your shell and switcher service.
 
 ## Use the menu
 
@@ -35,32 +34,44 @@ available on each screen.
 
 - **New Terminal** returns to your shell. **Exit** exits that shell.
 - **Codex: New Session** appears when no sessions exist and asks for a unique
-  name and starting directory. The directory picker starts at your current
+  name, starting directory, and account. The directory picker starts at your current
   directory, lets you browse or type a path, and can create a new directory.
   Session names may contain letters, digits, spaces, and `_+-=~()[]`.
-- **Codex: Sessions** lists running tmux sessions, detached idle tmux sessions
+- **Codex: Sessions** lists live sessions, idle sessions
   marked `*`, and saved conversations marked `(inactive)`, newest first within
-  each group. It shows the switcher's account nickname in brackets. You can
-  resume, rename, move, or terminate an idle tmux session; Terminate keeps its
-  conversation available under inactive sessions. Inactive conversations have
-  Start, Rename, Move, and a confirmed Delete action. Rename stores a display
-  alias in `~/.local/state/satellite-cli/session-names.tsv` (or `XDG_STATE_HOME`).
-  **Codex: Resume** opens the most recent tmux session; **Codex: Start** opens
-  the most recent saved conversation when no tmux session exists.
-- **Move** can change only the session root, or move its folder into a chosen
-  parent directory and rename it. Both paths resume the same Codex conversation
-  under its original account. A running turn, attached tmux session, or active
-  child process disables Move. Cross-filesystem moves check free space and show
-  copy progress.
-- **Codex: Account Switcher** opens account monitoring and manual moves. New
-  sessions launched here run Codex using your current configuration; the
-  dashboard does not choose their account.
+  each group when recency is available. The list updates live; working sessions
+  have an animated indicator and remain selectable. Brackets show the enrolled
+  identity nickname. Session Details shows the underlying account provenance.
+  Discovery failures are shown explicitly, with retained live rows marked unknown.
+- Open a session to **Resume** it, **Start** its exact saved conversation,
+  **Rename** its display label, **Move To Account**, **Relocate Project**, or
+  **Restart** its live terminal. Backends supporting **Pause Session** and
+  **Terminate** expose those actions too; Terminate retains the saved conversation.
+  Relocation can change the root directory or
+  move the whole folder, with a review before queueing. Switcher handles history,
+  permissions, account homes, safe stopping, storage checks, and recovery.
+  Saved conversations reopen in their original home, including the default Codex
+  home. Capacity warnings do not prevent opening context; Codex enforces limits
+  when you send work. The switcher dashboard also provides Open and Archives
+  recovery as a fallback.
+- **Codex Jobs** shows durable operation progress and full explanations. Review
+  numbered pause, background-task, and risk confirmations before responding.
+  Closing a screen leaves jobs running; Cancel Job requests cancellation before
+  the restart boundary. Recover Interrupted Job asks switcher to restore the
+  source when safe. Full Details includes retained backup and staging paths;
+  the menu never removes those directories.
+- **Codex: Account Switcher** opens the account dashboard. Automatic switching
+  remains unavailable. Delete is omitted until switcher exposes a safe backend
+  command for it.
 - **Jobs** manages stopped jobs from this shell. It is unavailable when none
   exist.
 
 Detach from a Codex or dashboard tmux session with Ctrl+B, then D. The menu
 returns; the Sessions list keeps the same session selected. If Codex fails
 during startup, its pane keeps the error visible until you terminate it.
+Display aliases and menu-open recency are stored under
+`${XDG_STATE_HOME:-~/.local/state}/satellite-cli`; conversation history stays
+under switcher's control.
 
 ## Customize
 
@@ -75,10 +86,11 @@ change the main menu.
 
 ```bash
 bash tests/smoke.bash
+bash tests/backend.bash
+bash tests/watch.bash
 bash tests/switcher.bash
 bash tests/session_focus.bash
 bash tests/move.bash
-bash tests/move_tmux.bash
 bash tests/launch.bash
 bash tests/stars.bash
 perl tests/terminal.pl
@@ -87,3 +99,9 @@ perl tests/terminal.pl
 Tests use fake or isolated sessions and do not operate on your live Codex
 sessions. The terminal suite needs Perl `IO::Pty`. Contributor rules and renderer
 benchmark commands are in [AGENTS.md](AGENTS.md).
+
+The backend contract is documented in Codex Switcher's
+`docs/CLI_MAIN_MENU_INTEGRATION.md`. The menu uses `sessions --all` and
+`sessions --all --watch` for inventory, `status --json` for account choices,
+`run --account` for new launches, `open --session ID` for saved conversations,
+and durable move/restart/relocate/pause/terminate jobs for changes.

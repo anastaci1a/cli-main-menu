@@ -1,121 +1,56 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-test_root=$(mktemp -d /tmp/satellite-switcher-test.XXXXXX)
-trap '/usr/bin/rm -rf -- "$test_root"' EXIT
-switcher_log=$test_root/switcher.log
-tmux_log=$test_root/tmux.log
-monitor_file=$test_root/monitor
-: > "$switcher_log"
-: > "$tmux_log"
-
-switch_ready=1
+test_root=$(mktemp -d)
+trap 'rm -rf -- "$test_root"' EXIT
+export XDG_STATE_HOME=$test_root/state
+source "$cli_dir/init.bash"
+source "$cli_dir/init.bash"
 codex-switcher() {
-  printf '<%s>' "$@" >> "$switcher_log"
-  printf '\n' >> "$switcher_log"
-  [[ $1 == ready ]] || return 99
-  return "$switch_ready"
-}
-tmux() {
-  local argument
-  printf '%s' "$1" >> "$tmux_log"
-  for argument in "${@:2}"; do printf '<%s>' "$argument" >> "$tmux_log"; done
-  printf '\n' >> "$tmux_log"
+  printf '%s\0' "$@" > "$test_root/args"
   case $1 in
-    has-session) [[ $3 == '=codex-switcher' ]] && [[ -s $monitor_file ]] || [[ $3 == '$0' ]] ;;
-    new-session)
-      if [[ " $* " == *' -s codex-switcher '* ]]; then
-        printf 'active\n' > "$monitor_file"
-      else
-        printf '$0\n'
-      fi
-      ;;
-    list-sessions)
-      [[ ! -s $monitor_file ]] || printf '$9|codex-switcher|100|200|\n'
-      ;;
-    attach-session|switch-client|set-option) : ;;
+    status) printf '{"schema_version":1,"daemon":{"running":true},"accounts":[{"name":"personal","eligible":false},{"name":"work","eligible":true}]}' ;;
+    open) printf '{"schema_version":1,"session":{"pane":"%%7","tmux_session":"codex-project"}}' ;;
     *) return 99 ;;
   esac
 }
-
-source -- "$cli_dir/init.bash"
-source -- "$cli_dir/init.bash"
-[[ ! -s $switcher_log && ! -s $tmux_log ]]
-if ez_codex_valid_name switcher; then exit 1; fi
-printf 'PASS repeated sourcing starts no switcher or tmux process\n'
-
-if command -v jq >/dev/null 2>&1; then
-  codex-switcher() {
-    [[ $1 == instances ]] || return 99
-    printf '[{"inactive":false,"tmux_session":"codex-Alpha","account":"external","display_account":"personal"},{"inactive":false,"tmux_session":"codex-Beta","account":"work","display_account":"work"},{"inactive":false,"tmux_session":"codex-Gamma","account":"external","display_account":null},{"inactive":false,"tmux_session":"codex-Delta","account":"work"},{"inactive":true,"tmux_session":"codex-Epsilon","account":"personal","display_account":"personal"}]\n'
-  }
-  ez_codex_names=(Alpha Beta Gamma Delta Epsilon)
-  ez_codex_session_accounts
-  [[ ${ez_codex_accounts[*]} == 'personal work external work unknown' ]]
-  unset -f codex-switcher
-fi
-printf 'PASS session labels prefer identity nickname and fall back to account provenance\n'
-
-codex-switcher() {
-  printf '<%s>' "$@" >> "$switcher_log"
-  printf '\n' >> "$switcher_log"
-  [[ $1 == ready ]] || return 99
-  return "$switch_ready"
+tmux() {
+  printf '<%s>' "$@" >> "$test_root/tmux"
+  case $1 in
+    has-session) [[ -f $test_root/monitor ]] ;;
+    new-session) touch "$test_root/monitor" ;;
+    attach-session|switch-client|set-option|select-window|select-pane) : ;;
+    *) return 99 ;;
+  esac
 }
-
-PATH='/tmp/path with spaces'
 TMUX=''
-unset CODEX_HOME
-CODEX_SWITCHER_HOME="$test_root/state with spaces"
-export CODEX_SWITCHER_HOME
-ez_menu_codex_monitor_available
-if ez_menu_codex_switching_available; then exit 1; fi
-[[ $(< "$switcher_log") == '<ready>' ]]
-ez_menu_codex_monitor >/dev/null 2>&1
-ez_menu_codex_monitor >/dev/null 2>&1
-[[ -s $monitor_file ]]
-if ez_menu_has_codex; then exit 1; fi
-tmux_output=$(< "$tmux_log")
-[[ $tmux_output == *'new-session<-d><-s><codex-switcher><-e><PATH=/tmp/path with spaces><-e><CODEX_SWITCHER_HOME='* ]]
-[[ $tmux_output == *'<codex-switcher><ui>'* ]]
-new_count=0
-while IFS= read -r line; do [[ $line != new-session* ]] || new_count=$((new_count+1)); done <<< "$tmux_output"
-[[ $new_count == 1 ]]
-[[ $tmux_output == *'attach-session<-t><=codex-switcher>'* ]]
-TMUX='test-client'
-ez_menu_codex_monitor >/dev/null 2>&1
-tmux_output=$(< "$tmux_log")
-[[ $tmux_output == *'switch-client<-t><=codex-switcher>'* ]]
-new_count=0
-while IFS= read -r line; do [[ $line != new-session* ]] || new_count=$((new_count+1)); done <<< "$tmux_output"
-[[ $new_count == 1 ]]
-printf 'PASS monitor session reuses tmux and switches clients without nesting\n'
-
-switch_ready=0
-ez_menu_codex_switching_available
-test_dir="$test_root/"'path with spaces;$(printf hijack)'
-/usr/bin/mkdir -p -- "$test_dir"
-ez_codex_field() {
-  if [[ $1 == 'Session name' ]]; then printf 'test-name'
-  else printf '%s' "$test_dir"; fi
-}
-ez_codex_new >/dev/null 2>&1
-tmux_output=$(< "$tmux_log")
-[[ $tmux_output == *"new-session<-d><-P><-F><#{session_id}><-s><codex-test-name><-c><$test_dir><-e><PATH=/tmp/path with spaces>"* ]]
-[[ $tmux_output == *'<satellite-codex><codex><--dangerously-bypass-approvals-and-sandbox>'* ]]
-[[ $tmux_output == *'switch-client<-t><$0>'* ]]
-[[ $(< "$switcher_log") != *'<run>'* ]]
-printf 'PASS readiness does not change direct Codex launch or quoted arguments\n'
-
-TMUX=''
-ez_codex_new >/dev/null 2>&1
-[[ $(< "$tmux_log") == *'attach-session<-t><$0>'* ]]
-printf 'PASS Codex attaches outside tmux and switches clients inside tmux\n'
-
-PATH=''
-unset -f tmux
-if ez_menu_codex_monitor_available; then exit 1; fi
-unset -f codex-switcher
-if ez_menu_codex_monitor_available || ez_menu_codex_switching_available; then exit 1; fi
-printf 'PASS missing binaries disable the dashboard action\n'
+ez_menu_codex_monitor >/dev/null
+TMUX=test-client
+ez_menu_codex_monitor >/dev/null
+[[ $(< "$test_root/tmux") == *'<codex-switcher><ui>'* ]]
+[[ $(< "$test_root/tmux") == *'<switch-client><-t><=codex-switcher>'* ]]
+[[ ! -e $test_root/args ]]
+ez_menu_choose() { printf '%s\0' "$@" > "$test_root/choices"; printf '1'; }
+[[ $(ez_codex_choose_account launch) == work ]]
+mapfile -d '' -t options < "$test_root/choices"
+[[ " ${options[*]} " != *' --disabled 0 '* && " ${options[*]} " == *'personal (check capacity)'* ]]
+[[ $(ez_codex_choose_account move work) == work ]]
+mapfile -d '' -t options < "$test_root/choices"
+[[ " ${options[*]} " == *' --disabled 1 '* && " ${options[*]} " != *' --disabled 0 '* ]]
+# A real selector refuses the current home; the fake above only records its args.
+ez_codex_attach() { printf '%s\0' "$@" > "$test_root/attach"; }
+ez_codex_valid_name() { return 0; }
+thread=12345678-1234-1234-1234-123456789abc
+row=$(jq -nc --arg thread "$thread" '{id:("thread:"+$thread),thread_id:$thread,name:"project",cwd:"/tmp/path with spaces;$(literal)",account:"work",display_account:"personal",lifecycle:"inactive"}')
+ez_codex_start "$row"
+mapfile -d '' -t args < "$test_root/args"
+[[ ${args[0]} == open && ${args[1]} == --session && ${args[2]} == "thread:$thread" && ${args[4]} == codex-project ]]
+mapfile -d '' -t args < "$test_root/attach"
+[[ ${args[0]} == =codex-project && ${args[1]} == %7 ]]
+ez_codex_document() { return 0; }
+ez_codex_account_move() { printf 'move\n' > "$test_root/external"; }
+ez_codex_start "$(jq '.account="external"' <<< "$row")"
+[[ ! -f $test_root/external ]]
+mapfile -d '' -t args < "$test_root/args"
+[[ ${args[0]} == open && ${args[2]} == "thread:$thread" ]]
+printf 'PASS dashboard reuse, capacity warnings, original-home backend opening and attachment\n'

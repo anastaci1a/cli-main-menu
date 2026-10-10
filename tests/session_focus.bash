@@ -1,101 +1,40 @@
 #!/usr/bin/env bash
-# Exercise menu selection across a reorder without touching live tmux sessions.
 set -euo pipefail
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-test_root=$(mktemp -d /tmp/satellite-session-focus.XXXXXX)
+test_root=$(mktemp -d)
 trap 'rm -rf -- "$test_root"' EXIT
-source -- "$cli_dir/init.bash"
-codex-switcher() { printf 'query\n' >> "$test_root/discovery-calls"; printf '[]\n'; }
-
-ez_codex_scan() {
-  case $scenario:$state in
-    existing:before)
-      ez_codex_ids=('$1' '$2') ez_codex_names=(Alpha Beta)
-      ;;
-    existing:after)
-      ez_codex_ids=('$2' '$1') ez_codex_names=(Beta Alpha)
-      ;;
-    new:before|gone:after)
-      ez_codex_ids=() ez_codex_names=()
-      ;;
-    new:after|gone:before)
-      ez_codex_ids=('$2') ez_codex_names=(Beta)
-      ;;
-  esac
-  ez_codex_created=(100 100)
-}
-ez_codex_session_accounts() {
-  ez_codex_accounts=()
-  for ((i=0;i<${#ez_codex_ids[@]};i++)); do ez_codex_accounts[i]=personal; done
-}
-ez_codex_inactive_scan() { ez_inactive_ids=() ez_inactive_names=() ez_inactive_accounts=(); }
-ez_codex_session_idle() { return 1; }
-ez_menu_choose() {
-  printf '%s\n' "$1" >> "$selection_file"
-  local count
-  count=$(< "$choice_file")
-  printf '%d\n' "$((count+1))" > "$choice_file"
-  (( count == 0 )) || return 130
-  case $scenario in existing) printf '2';; new) printf '0';; gone) printf '1';; esac
-}
-ez_codex_actions() {
-  action_id=$1
-  state=after
-}
-ez_codex_new() {
-  ez_codex_new_id='$2'
-  state=after
-}
-
-for scenario in existing new gone; do
-  state=before action_id=''
-  selection_file=$test_root/$scenario.selections
-  choice_file=$test_root/$scenario.choice
-  printf '0\n' > "$choice_file"
-  ez_menu_codex_sessions
-  mapfile -t discovery_calls < "$test_root/discovery-calls"
-  [[ ${#discovery_calls[@]} == 2 ]]
-  : > "$test_root/discovery-calls"
-  mapfile -t selections < "$selection_file"
-  case $scenario in
-    existing)
-      [[ $action_id == '$2' && ${selections[*]} == '0 1' ]]
-      ;;
-    new)
-      [[ ${selections[*]} == '0 1' ]]
-      ;;
-    gone)
-      [[ $action_id == '$2' && ${selections[*]} == '0 0' ]]
-      ;;
-  esac
-done
-printf 'PASS session focus follows the tmux ID after reorder or creation and resets after removal\n'
-
-ez_codex_session_idle() { [[ $1 == '$1' ]]; }
-ez_codex_session_accounts() { ez_codex_accounts=(work personal); }
-ez_codex_inactive_scan() {
-  ez_inactive_ids=(12345678-1234-1234-1234-123456789abc)
-  ez_inactive_names=(Saved)
-  ez_inactive_accounts=(work)
-}
-ez_menu_choose() {
-  printf '%s\0' "$@" > "$test_root/ordered-args"
-  return 130
-}
-scenario=existing state=before
-ez_menu_codex_sessions
-mapfile -d '' -t ordered < "$test_root/ordered-args"
-labels=()
-found=0
-for entry in "${ordered[@]}"; do
-  if (( found )); then labels+=("$entry"); fi
-  [[ $entry == -- ]] && found=1
-done
-[[ ${labels[0]} == '[new session]' && ${labels[1]} == 'Beta   [personal]' &&
-   ${labels[2]} == 'Alpha*     [work]' && ${labels[3]} == 'Saved      [work]' ]]
-[[ ${#labels[1]} == ${#labels[2]} && ${#labels[2]} == ${#labels[3]} ]]
-[[ " ${ordered[*]} " == *' --gray-suffix 3  (inactive) '* ]]
-[[ " ${ordered[*]} " == *' --live-duration 1 100  ( selected '* ]]
-[[ " ${ordered[*]} " == *' --live-duration 2 100  ( selected '* ]]
-printf 'PASS Sessions orders running, idle, then inactive and marks idle tmux sessions\n'
-printf 'PASS account labels align right with one space before timers and inactive labels\n'
+export XDG_STATE_HOME=$test_root/state
+source "$cli_dir/init.bash"
+codex-switcher() { [[ $1 == sessions && $2 == --all ]]; cat "$test_root/snapshot"; }
+tmux() { [[ $1 == list-panes ]] && printf '%%1|100|300\n%%2|200|400\n' || return 99; }
+cat > "$test_root/snapshot" <<'JSON'
+{"schema_version":1,"observed_at":10,"sessions":[
+{"id":"pane:%1","pane":"%1","thread_id":"12345678-1234-1234-1234-123456789abc","name":"codex-Alpha","cwd":"/tmp","account":"external","display_account":"work","lifecycle":"live","activity":"idle"},
+{"id":"pane:%2","pane":"%2","name":"codex-Beta","cwd":"/tmp","account":"personal","display_account":"personal","lifecycle":"live","activity":"busy"},
+{"id":"thread:12345678-1234-1234-1234-123456789def","thread_id":"12345678-1234-1234-1234-123456789def","name":"Saved","cwd":"/tmp","account":"work","lifecycle":"inactive"}]}
+JSON
+original_labels=(Refresh) menu_keys=() menu_threads=() duration_created=() duration_prefix=() duration_mode=()
+specified_accent_suffix=() specified_gray_suffix=() busy_rows=() disabled_indices='' selected=0 description='' screen_title='Sessions'
+ez_codex_sessions_refresh
+[[ ${menu_keys[*]} == 'new pane:%2 pane:%1 thread:12345678-1234-1234-1234-123456789def jobs' ]]
+[[ ${original_labels[1]} == 'Beta   [personal]' && ${original_labels[2]} == 'Alpha*     [work]' && ${original_labels[3]} == 'Saved      [work]' ]]
+[[ ${busy_rows[*]} == 1 && $disabled_indices == '' ]]
+[[ ${specified_gray_suffix[3]} == ' (inactive)' && ${duration_created[1]} == 200 ]]
+# Move Beta behind Alpha while it is selected. Identity, not row number, wins.
+selected=1 refresh_function=ez_codex_sessions_refresh
+jq '.sessions[0].activity="busy" | .sessions[1].activity="idle"' "$test_root/snapshot" > "$test_root/next"
+mv "$test_root/next" "$test_root/snapshot"
+ez_menu_refresh_view
+[[ $selected == 2 && ${menu_keys[selected]} == pane:%2 ]]
+# Saved -> live changes the stable key, but the exact thread keeps focus.
+selected=3
+jq '.sessions[2] += {id:"pane:%3",pane:"%3",lifecycle:"live",activity:"unknown"}' "$test_root/snapshot" > "$test_root/next"
+mv "$test_root/next" "$test_root/snapshot"
+ez_menu_refresh_view
+[[ ${menu_keys[selected]} == pane:%3 ]]
+# A failed inventory is visible and never turns stale activity into idle/empty.
+printf '{broken' > "$test_root/snapshot"
+ez_menu_refresh_view
+[[ $description == 'Discovery Disconnected:'* && ${#menu_keys[@]} == 6 && ${#busy_rows[@]} == 0 ]]
+[[ ${specified_gray_suffix[selected]} == ' (unknown; disconnected)' ]]
+printf 'PASS grouped inventory, aligned nicknames, busy selection, stable focus and disconnected state\n'

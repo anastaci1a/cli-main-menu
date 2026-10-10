@@ -311,6 +311,14 @@ function ez_stars_text_layout() {
     unset 'stars_color_pair[cell]'
   done
   stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
+  # Plain explanatory text is painted by the chooser, never covered by stars.
+  for ((line=0;line<${#description_rows[@]};line++)); do
+    row=$((4+line))
+    for ((col=0;col<COLUMNS;col++)); do
+      cell=$(((row-1)*COLUMNS+col))
+      stars_occluded[$cell]=1
+    done
+  done
   if (( ${menu_has_back:-0} && option_left > 0 )); then
     row=$((banner_count + 3))
     left=$((option_left >= 8 ? option_left - 8 : 0))

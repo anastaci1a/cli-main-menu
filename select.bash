@@ -4,6 +4,9 @@
 function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index now live_suffix duration_output duration_suffix duration_color duration_col duration_row duration_width
   local menu_back_focused=0 menu_has_back=0
+  local refresh_function='' refresh_at=0 menu_cleanup='' description='' description_output='' description_seen=''
+  local -a menu_keys=() menu_threads=() busy_rows=() description_rows=()
+  local watch_pid='' watch_fd='' watch_errors='' watch_partial='' watch_snapshot='' watch_failed=0 watch_started=0
   local disabled_indices='' enabled_count=0 direction attempts label_color weight number_color note note_text
   local read_status last_tick=-1 redraw=1 layout_dirty=1
   local full_redraw=1 option_frame=0 text_cache_key='' new_text_key
@@ -54,9 +57,12 @@ function ez_menu_choose() (
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   local -a duration_created=() duration_prefix=() duration_mode=() specified_accent_suffix=() specified_gray_suffix=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
   shift 2
+  trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"' EXIT
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
     case $1 in
+      --refresh) refresh_function=$2; shift 2 ;;
+      --description) description=$2; shift 2 ;;
       --screen-title)
         (( $# >= 2 )) || return 1
         screen_title=$2
@@ -94,6 +100,11 @@ function ez_menu_choose() (
   done
   local count=$#
   local -a original_labels=("$@") responsive_labels
+  if [[ -n $refresh_function ]]; then
+    "$refresh_function" || :
+    count=${#original_labels[@]}
+    refresh_at=$((SECONDS+2))
+  fi
   (( count > 0 )) || return 1
   for ((index = 0; index < count; index++)); do menu_enabled[index]=1; done
   for index in $disabled_indices; do
@@ -119,6 +130,7 @@ function ez_menu_choose() (
     set -- "${original_labels[@]}"
     if [[ -n $screen_title ]]; then printf '%s\n\n' "$screen_title" >&2
     else printf '%s\n\n' "$banner" >&2; fi
+    [[ -z $description ]] || printf '%s\n\n' "$description" >&2
     index=0
     for label in "$@"; do
       label_color=$C_WHITE number_color=$C_PINK weight='' note_text=''
@@ -136,7 +148,7 @@ function ez_menu_choose() (
     while IFS= read -r -p "  Choose [1-$count] > " key; do
       for ((index = 0; index < count; index++)); do
         if [[ $key == "$((index + 1))" ]] && (( menu_enabled[index] )); then
-          printf '%d' "$index"
+          printf '%s' "${menu_keys[index]-$index}"
           return
         fi
       done
@@ -150,9 +162,9 @@ function ez_menu_choose() (
   terminal_state=$(stty -g <&0 2>/dev/null) || return 130
   # Restore the exact input modes before launching an action (including tmux/fg).
   if (( ${ez_menu_shared_screen:-0} )); then
-    trap 'stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m" >&2' EXIT
+    trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"; stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m" >&2' EXIT
   else
-    trap 'stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
+    trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"; stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
   fi
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
@@ -179,6 +191,10 @@ function ez_menu_choose() (
   (( selected >= count )) && selected=0
   while :; do
     frame='' status_output='' option_frame=0
+    if [[ -n $refresh_function ]] && (( SECONDS >= refresh_at )); then
+      ez_menu_refresh_view
+      refresh_at=$((SECONDS+2))
+    fi
     if (( ez_stars_animated )); then
       ez_stars_now
       stars_frame_started=$stars_now
@@ -202,13 +218,19 @@ function ez_menu_choose() (
         if [[ ${duration_created[index]+set} ]] && { [[ ${duration_mode[index]} == always ]] || (( index == selected && ! menu_back_focused )); }; then
           live_suffix="${duration_prefix[index]}$(ez_codex_duration "$((now-duration_created[index]))"))"
           responsive_labels[index]+=$live_suffix
-          menu_gray_suffix[index]=$live_suffix
+          menu_gray_suffix[index]+=$live_suffix
         fi
         label=${responsive_labels[index]}
         case $label in
           'Codex: Resume ('*) menu_accent_suffix[index]=${label#'Codex: Resume'} ;;
           'Codex: Start ('*) menu_accent_suffix[index]=${label#'Codex: Start'} ;;
         esac
+      done
+      for index in "${busy_rows[@]}"; do
+        local spinner='|/-\\'
+        live_suffix=" (working ${spinner:SECONDS%4:1})"
+        responsive_labels[index]+=$live_suffix
+        menu_gray_suffix[index]+=$live_suffix
       done
       # Read the real terminal size: phone keyboards/app switching can change it.
       term_size=$(stty size <&2 2>/dev/null) || term_size=''
@@ -222,6 +244,7 @@ function ez_menu_choose() (
         if [[ ${last_labels[index]-} != "${responsive_labels[index]}" ]]; then
           text_cache_key=''
           [[ ${duration_created[index]+set} ]] && changed_durations+=("$index")
+          [[ -z $refresh_function ]] || redraw=1
         fi
       done
       last_labels=("${responsive_labels[@]}")
@@ -248,6 +271,12 @@ function ez_menu_choose() (
           title_width=0
           if (( COLUMNS != cached_columns || LINES != cached_lines )); then
             banner=$(ez_menu_screen_banner "$screen_title")
+            description_rows=()
+            if [[ -n $description ]]; then
+              mapfile -t description_rows <<< "$description"
+              banner+=$'\n'
+              for row in "${description_rows[@]}"; do banner+=$'\n'"  $C_GRAY${row:0:COLUMNS-4}$C_RESET"; done
+            fi
             cached_columns=$COLUMNS cached_lines=$LINES
           fi
         elif (( main_banner )); then
@@ -366,6 +395,8 @@ function ez_menu_choose() (
           for ((row = 2; row <= ${#fitted_rows[@]} + 2; row++)); do
             if (( row == 2 )) && [[ -n $screen_title ]]; then
               printf '%s' "$header_line"
+            elif (( row >= 4 && row < 4 + ${#description_rows[@]} )); then
+              printf '%*s\r  %s%s%s' "$COLUMNS" '' "$C_GRAY" "${description_rows[row-4]:0:COLUMNS-4}" "$C_RESET"
             else
               ez_stars_render_span "$row" 0 "$COLUMNS"
             fi
@@ -381,6 +412,13 @@ function ez_menu_choose() (
           printf '\033[%d;1H' "$(( ${#fitted_rows[@]} + 3 ))"
           ez_menu_draw "$selected" "$first" "$visible" "$@"
         )
+      fi
+      description_output=''
+      if [[ $description_seen != "$description" ]]; then
+        for index in "${!description_rows[@]}"; do
+          printf -v description_output '%s\033[%d;1H\033[2K  %s%s%s' "$description_output" "$((index+4))" "$C_GRAY" "${description_rows[index]:0:COLUMNS-4}" "$C_RESET"
+        done
+        description_seen=$description
       fi
       duration_output=''
       if (( ! option_frame && ${#changed_durations[@]} )) && [[ -z $frame ]]; then
@@ -399,7 +437,7 @@ function ez_menu_choose() (
           printf -v duration_output '%s\033[%d;%dH%s%s%s%s' "$duration_output" "$duration_row" "$duration_col" "$C_RESET" "$duration_color" "$duration_suffix" "$C_RESET"
         done
       fi
-      printf '%s%s%s%s%s' "$status_output" "$header_output" "$frame" "$stars_output" "$duration_output" >&2
+      printf '%s%s%s%s%s%s' "$status_output" "$header_output" "$frame" "$stars_output" "$duration_output" "$description_output" >&2
       ez_stars_now
       stars_delay=$((50 - (stars_now - stars_frame_started)))
       (( stars_delay < 1 )) && stars_delay=1
@@ -416,7 +454,7 @@ function ez_menu_choose() (
     fi
     case $key in
       ''|' ') if (( menu_back_focused )); then return 130; fi
-          printf '%d' "$selected"; return ;;
+          printf '%s' "${menu_keys[selected]-$selected}"; return ;;
       $'\033')
         # Accept both normal (CSI) and application-mode (SS3) arrow keys.
         IFS= read -rsn1 -t 0.08 next || return 130
@@ -450,3 +488,32 @@ function ez_menu_choose() (
   done
   return 130
 )
+
+# Refresh presentation in the chooser's own scope, preserving selection by identity.
+# Hooks replace the arrays in place; a stable view leaves animation/layout intact.
+ez_menu_refresh_view() {
+  local key=${menu_keys[selected]-} thread=${menu_threads[selected]-} index found=0
+  local before after
+  before=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows description screen_title disabled_indices)
+  "$refresh_function" || :
+  after=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows description screen_title disabled_indices)
+  count=${#original_labels[@]}
+  (( count )) || return 0
+  menu_enabled=() enabled_count=0
+  for ((index=0;index<count;index++)); do menu_enabled[index]=1; done
+  for index in $disabled_indices; do menu_enabled[index]=0; done
+  for ((index=0;index<count;index++)); do
+    (( menu_enabled[index] )) && enabled_count=$((enabled_count+1))
+    if [[ ${menu_keys[index]-} == "$key" && -n $key ]]; then selected=$index; found=1; fi
+  done
+  if (( ! found )) && [[ -n $thread ]]; then
+    for ((index=0;index<count;index++)); do
+      if [[ ${menu_threads[index]-} == "$thread" ]]; then selected=$index; found=1; break; fi
+    done
+  fi
+  (( found )) || selected=0
+  while (( ! menu_enabled[selected] && enabled_count )); do selected=$(((selected+1)%count)); done
+  if [[ $before != "$after" ]]; then
+    redraw=1 layout_dirty=1 text_cache_key='' cached_columns=0
+  fi
+}

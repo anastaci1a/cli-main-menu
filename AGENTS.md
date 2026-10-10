@@ -2,8 +2,9 @@
 
 This directory is the Git repository; the integrating `.bashrc` is two levels
 above it. Use `apply_patch` for edits. Preserve unrelated `.bashrc` content,
-existing function names, and the module split (`init`, `menu`, `select`,
-`render`, `stars`, `sessions`, `actions`, `font`, `theme`).
+public entry points, and the module split. `switcher.bash` validates backend
+JSON; `session-menu.bash` owns session presentation/actions; `sessions.bash`
+contains text/path input widgets and display aliases.
 
 ## Loading and behavior
 
@@ -20,15 +21,24 @@ existing function names, and the module split (`init`, `menu`, `select`,
 - Run actions in the calling shell so `fg` sees its jobs. Isolate only the
   selector. Skip disabled choices in both directions and reject them in the
   numeric fallback. Jobs availability means stopped jobs in that shell.
-- Keep session names, directory validation, exact `codex` tmux recognition,
-  explicit Codex launch options, and `cxr` behavior. Return to the appropriate
-  menu after detach with the same session selected. Preserve the switcher's
-  account/home distinction; use `display_account` only for display.
-- Keep inactive conversations visible across switcher accounts; preserve exact
-  thread IDs and homes on Start/Move. Never terminate an unfinished turn or
-  delete a conversation through the tmux Terminate action.
-- Share switcher discovery only within a menu refresh. Actions must recheck
-  current state; a visible Codex prompt does not override an unfinished rollout.
+- Use switcher's `docs/CLI_MAIN_MENU_INTEGRATION.md` contract. Inventory and
+  activity come only from `sessions`; failed/malformed discovery is not empty
+  success, and missing activity is unknown. Keep busy rows selectable. Track
+  selection by backend ID with exact-thread fallback after a lifecycle change.
+- Display `display_account` with `account` fallback; only `account` represents
+  home provenance. Use `run --account` for new launches and `open --session ID`
+  for saved history, attaching the returned target. Never substitute a display
+  nickname for the source home. Capacity is a warning, not a launch prohibition.
+  No implicit account fallback or `resume --last`. Automatic switching stays off.
+- Queue account moves, restarts, relocation, and supported pause/termination
+  operations through switcher. Always show
+  relocation dry-run review. Explicitly answer each `awaiting_*` prompt using
+  its displayed `confirmation_seq`; never silently retry a stale approval.
+  Show full detail, cancellation, recovery and retained paths. UI exit stops
+  only its owned inventory watcher, never a durable worker or Codex process.
+- Do not read credentials, databases, or rollouts; copy histories; stop/steer
+  Codex; or move project files here. tmux is only for creation, attachment, and
+  presentation timestamps. Preserve text/path input behavior and `cxr`.
 - Keep the alternate screen, cursor, focus, and exact terminal-mode cleanup on
   return and signals. Suppress input echo throughout rendering as well as reads.
 
@@ -56,9 +66,9 @@ existing function names, and the module split (`init`, `menu`, `select`,
   `perl tests/terminal.pl` after rendering, navigation, or action edits. Add a
   focused regression check for new behavior. Run `bash tests/stars.bash` for
   animation changes; use simulated times instead of sleeps. Run the relevant
-  `tests/switcher.bash`, `tests/session_focus.bash`, or `tests/launch.bash` for
-  session changes; run `tests/move.bash` and `tests/move_tmux.bash` for
-  move/inactive changes.
+  `tests/backend.bash`, `tests/watch.bash`, `tests/switcher.bash`,
+  `tests/session_focus.bash`, and `tests/launch.bash` for session changes;
+  run `tests/move.bash` for durable job/relocation changes.
 - Stub tmux/Codex or use isolated test sockets. Never attach, resume, or
   terminate the user's live sessions or jobs in tests.
 - For performance work, use `tools/benchmark.bash`,

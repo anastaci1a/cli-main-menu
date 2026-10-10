@@ -27,6 +27,7 @@ mapfile -t fitted_rows <<< "$(ez_menu_banner 0 2)"
 # Simulate availability without touching tmux, Codex, or live shell jobs. Read
 # labels from the same menu definition as startup, so the preview follows edits.
 ez_menu_has_codex() { return 1; }
+ez_menu_codex_label() { printf 'Codex: Resume (cli-main-menu)'; }
 codex-switcher() { :; }
 ez_menu_codex_monitor_available() { return 0; }
 ez_menu_has_stopped_jobs() { return 1; }

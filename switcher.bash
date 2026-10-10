@@ -25,8 +25,7 @@ ez_switcher_request() {
   ez_switcher_error=''
 }
 
-ez_switcher_inventory() {
-  ez_switcher_request '
+ez_switcher_inventory_filter='
     select(type == "object" and .schema_version == 1 and (.observed_at | type == "number")) |
     select(.sessions | type == "array") |
     select(all(.sessions[];
@@ -40,7 +39,53 @@ ez_switcher_inventory() {
     select(([.sessions[].id] | unique | length) == (.sessions | length)) |
     .sessions |= map(.activity = (if .lifecycle == "inactive" then "inactive"
       elif .activity == "busy" or .activity == "idle" then .activity else "unknown" end))
-  ' sessions --all
+  '
+ez_switcher_inventory() {
+  ez_switcher_request "$ez_switcher_inventory_filter" sessions --all
+}
+
+# The chooser owns this read-only stream and closes it on every exit path.
+# Only the watcher process is stopped; durable operation workers are backend-owned.
+ez_switcher_watch_start() {
+  watch_errors=$(mktemp) || return 1
+  coproc EZ_CODEX_WATCH { exec codex-switcher sessions --all --watch --interval 2 2>"$watch_errors"; }
+  watch_pid=$EZ_CODEX_WATCH_PID
+  exec {watch_fd}<&"${EZ_CODEX_WATCH[0]}"
+  exec {EZ_CODEX_WATCH[1]}>&-
+  watch_partial=''
+}
+
+ez_switcher_watch_close() {
+  if [[ -n ${watch_pid:-} ]]; then
+    kill "$watch_pid" 2>/dev/null || :
+    wait "$watch_pid" 2>/dev/null || :
+  fi
+  [[ -z ${watch_fd:-} ]] || exec {watch_fd}<&-
+  [[ -z ${watch_errors:-} ]] || rm -f -- "$watch_errors"
+  watch_pid='' watch_fd='' watch_errors=''
+}
+
+# 0: a new complete snapshot; 1: no change; 2: disconnected/malformed.
+# Timed reads can return a partial JSON line. Preserve it until its newline.
+ez_switcher_watch_read() {
+  local part result status=1 attempt
+  for ((attempt=0;attempt<8;attempt++)); do
+    IFS= read -r -t 0 -u "$watch_fd" || return "$status"
+    part=''
+    if IFS= read -r -t 0.01 -u "$watch_fd" part; then result=0; else result=$?; fi
+    watch_partial+=$part
+    if (( result == 0 )); then
+      if ! ez_switcher_json=$(jq -cse "if length == 1 then .[0] | $ez_switcher_inventory_filter else empty end" <<< "$watch_partial" 2>/dev/null); then
+        ez_switcher_error='Session discovery returned an invalid snapshot.'; return 2
+      fi
+      watch_snapshot=$ez_switcher_json watch_partial='' status=0
+    elif (( result > 128 )); then return "$status"
+    else
+      ez_switcher_error="Session discovery disconnected. $(< "$watch_errors")"
+      return 2
+    fi
+  done
+  return "$status"
 }
 
 ez_switcher_accounts() {
@@ -82,7 +127,7 @@ ez_switcher_terminal_phase() {
 ez_switcher_find() {
   local snapshot=$1 key=$2 thread=${3-}
   ez_switcher_row=$(jq -ce --arg key "$key" --arg thread "$thread" '
-    ([.sessions[] | select(.id == $key)][0] //
+    ([.sessions[] | select(.id == $key and ($thread == "" or .thread_id == $thread))][0] //
      (if $thread != "" then [.sessions[] | select(.thread_id == $thread)][0] else null end)) // empty
   ' <<< "$snapshot")
 }

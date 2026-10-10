@@ -15,6 +15,7 @@ _ez_cli_load() {
   source -- "$cli_dir/actions.bash" || return
   source -- "$cli_dir/switcher.bash" || return
   source -- "$cli_dir/sessions.bash" || return
+  source -- "$cli_dir/session-menu.bash" || return
   source -- "$cli_dir/select.bash" || return
   source -- "$cli_dir/menu.bash" || return
   alias startup='clear && ez_select'

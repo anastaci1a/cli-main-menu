@@ -8,6 +8,12 @@ function ez_menu_define_items() {
     menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" 'Codex: Sessions|ez_menu_codex_sessions|stay')
   else
     menu_items+=('Codex: New Session|ez_codex_new|stay')
+    # Keep discovery errors and durable jobs reachable even without a live row.
+    if ez_switcher_available; then
+      if [[ -n ${ez_switcher_error:-} ]]; then
+        menu_items+=('Codex: Sessions (disconnected)|ez_menu_codex_sessions|stay')
+      else menu_items+=('Codex: Sessions|ez_menu_codex_sessions|stay'); fi
+    fi
   fi
   menu_items+=('Codex: Account Switcher|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
   menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')

@@ -48,7 +48,7 @@ sub expect {
   while ($buf !~ $pattern && time<$end) {pump(0.05)}
   die "FAIL $label\n$buf\n" unless $buf =~ $pattern;
 }
-sub send_keys { syswrite($pty,$_[0]); pump(0.15); }
+sub send_keys { syswrite($pty,$_[0]); pump(0.3); }
 sub plain { my $text=shift; $text =~ s/\e\[[0-9;?]*[A-Za-z]//g; return $text; }
 sub read_file {
   open my $file, '<', $_[0] or die $!;
@@ -239,6 +239,7 @@ for my $key ("\e[C", "\t") {
   expect(qr/> \/tm/,'root child prefix');
   my $start=length $buf;
   send_keys($key);
+  expect(qr/> \/tmp/,'root child selection rendered');
   my $selection=plain(substr($buf,$start));
   die 'selected root child was not displayed as /tmp' unless $selection =~ /> \/tmp/;
   die 'selected root child contained a double slash' if $selection =~ /> \/\/tmp/;
@@ -328,6 +329,52 @@ send_keys("\n");
 expect(qr/SELECTED=0 STATUS=0/,'Enter selects the highlighted main menu item');
 finish();
 print "PASS Right leaves the main menu selection unchanged; Enter selects\n";
+my $backend_test=tempdir(CLEANUP=>1);
+$ENV{TEST_BACKEND_BIN}="$backend_test/bin";
+$ENV{TEST_INVENTORY}="$backend_test/inventory";
+$ENV{TEST_WATCH_PIDS}="$backend_test/pids";
+mkdir $ENV{TEST_BACKEND_BIN} or die $!;
+open my $backend_script, '>', "$ENV{TEST_BACKEND_BIN}/codex-switcher" or die $!;
+print {$backend_script} <<'SH';
+#!/bin/bash
+[[ $1 == sessions ]] || exit 99
+if [[ $* == *--watch* ]]; then
+  printf '%s\n' "$$" >> "$TEST_WATCH_PIDS"
+  while :; do cat "$TEST_INVENTORY"; printf '\n'; sleep 0.2; done
+else cat "$TEST_INVENTORY"; fi
+SH
+close $backend_script;
+chmod 0755, "$ENV{TEST_BACKEND_BIN}/codex-switcher";
+sub inventory_fixture {
+  my ($first,$second)=@_;
+  open my $file, '>', "$ENV{TEST_INVENTORY}.next" or die $!;
+  print {$file} qq({"schema_version":1,"observed_at":100,"sessions":[{"id":"pane:%0","pane":"%0","name":"Alpha","cwd":"/tmp","account":"personal","lifecycle":"live","activity":"$first"},{"id":"pane:%1","pane":"%1","name":"Beta","cwd":"/tmp","account":"work","lifecycle":"live","activity":"$second"}]});
+  close $file;
+  rename "$ENV{TEST_INVENTORY}.next", $ENV{TEST_INVENTORY} or die $!;
+}
+inventory_fixture('idle','busy');
+start_case('backend_live');
+expect(qr/Beta/,'live inventory opens');
+send_keys("\e[B");
+inventory_fixture('busy','idle');
+expect(qr/Beta\*/,'watch updates busy to idle');
+send_keys("\n");
+expect(qr/SELECTED=pane:%1/,'watch reorder preserves the selected pane');
+finish();
+for my $watcher (split /\n/,read_file($ENV{TEST_WATCH_PIDS})) {
+  die 'watcher survived chooser exit' if kill 0, $watcher;
+}
+inventory_fixture('idle','busy');
+start_case('backend_live');
+expect(qr/Beta/,'live inventory before disconnect');
+open my $invalid, '>', $ENV{TEST_INVENTORY} or die $!;
+print {$invalid} '{invalid'; close $invalid;
+expect(qr/Discovery Disconnected/,'malformed stream is visible');
+expect(qr/unknown; disconnected/,'stale activity becomes unknown');
+send_keys("\e");
+finish();
+delete @ENV{qw(TEST_BACKEND_BIN TEST_INVENTORY TEST_WATCH_PIDS)};
+print "PASS live watch refresh, stable selection, disconnected state and cleanup\n";
 my $switcher_test=tempdir(CLEANUP=>1);
 $ENV{TEST_SWITCHER_LOG}="$switcher_test/switcher.log";
 $ENV{TEST_MONITOR_FILE}="$switcher_test/monitor";
@@ -340,10 +387,11 @@ die 'account switcher entry missing' unless plain($buf) =~ /Codex: Account Switc
 die 'automatic switching option should be hidden' if plain($buf) =~ /Automatic Account Switching/;
 pump(0.5);
 die 'readiness was polled by the menu' unless read_file($ENV{TEST_SWITCHER_LOG}) eq '';
-send_keys("\e[B\e[B\n");
+send_keys("\e[B\e[B\e[B\n");
 expect(qr/MONITOR_ATTACHED/,'monitor attached outside tmux');
 die 'monitor was mistaken for a Codex session' if plain($buf) =~ /Codex: Resume \(switcher\)/;
 send_keys("\n");
+expect(qr/MONITOR_ATTACHED.*MONITOR_ATTACHED/s,'monitor reattached');
 my $monitor_plain=plain($buf);
 die 'monitor session was not reused' unless (()=$monitor_plain =~ /MONITOR_CREATED/g)==1 && (()=$monitor_plain =~ /MONITOR_ATTACHED/g)==2;
 die 'monitor used a reserved switcher command' unless read_file($ENV{TEST_SWITCHER_LOG}) eq '';
@@ -352,7 +400,7 @@ finish();
 $ENV{TMUX}='fake-client';
 start_case('switcher_tmux');
 expect(qr/Account${gap}Switcher/,'monitor entry inside tmux');
-send_keys("\e[B\e[B\n");
+send_keys("\e[B\e[B\e[B\n");
 expect(qr/MONITOR_SWITCHED/,'existing tmux client switched to monitor session');
 die 'nested tmux attach used inside tmux' if $buf =~ /MONITOR_ATTACHED/;
 send_keys("\e");
@@ -376,11 +424,15 @@ finish();
 print "PASS scrolling long menus\n";
 my $session_dir=tempdir(CLEANUP=>1);
 $ENV{TEST_SESSION_FILE}="$session_dir/session";
-start_case('menu');
+start_case('menu_unavailable');
 expect(qr/Codex:${gap}New${gap}Session/,'new session label when empty');
 die 'missing account switcher is not continuously struck' unless $buf =~ /\e\[9mCodex: Account Switcher\e\[0m/;
 die 'missing account switcher explanation is absent' unless plain($buf) =~ /Codex: Account Switcher[ *+.]\(unavailable\)/;
 die 'sessions menu visible without sessions' if plain($buf) =~ /Codex: Sessions/;
+send_keys("\e");
+finish();
+start_case('menu');
+expect(qr/Codex:${gap}New${gap}Session/,'new session with backend');
 send_keys("\e[B\n");
 expect(qr/Session name/,'name prompt');
 expect(qr/\e\[48;2;255;255;255m\e\[38;2;0;0;0mT/,'empty name hint has contrasting block cursor');
@@ -402,25 +454,29 @@ die 'directory movement repaints the full frame' if $field_update =~ /\e\[H/;
 send_keys("\x15");
 expect(qr/\e\[48;2;255;255;255m\e\[38;2;0;0;0mT/,'empty path hint has block cursor');
 send_keys("/root\n");
+expect(qr/Choose Account/,'explicit account selection');
+send_keys("\n");
 expect(qr/CREATED:<new-session><-d><-P><-F><#\{session_id\}><-s><codex-Alpha><-c><\/root><-e><PATH=/,'launch directory and environment');
-expect(qr/<satellite-codex><codex><--dangerously-bypass-approvals-and-sandbox>/,'direct launch arguments');
+expect(qr/<satellite-codex><codex-switcher><run><--account><personal><--><--dangerously-bypass-approvals-and-sandbox>/,'managed launch arguments');
 expect(qr/ATTACHED_CODEX/,'new session attaches');
 expect(qr/Codex:${gap}Resume/,'resume label after detach');
 expect(qr/Codex:${gap}Sessions/,'sessions menu after creation');
 my $sessions_marker=length $buf;
 send_keys("\e[B\n");
+expect(qr/\[new${gap}session\]/,'session picker opens');
 my $sessions_screen=plain(substr($buf,$sessions_marker));
 die 'new session not first in picker' unless $sessions_screen =~ /\[new session\].*Alpha/s;
-die 'session account fallback missing from picker' unless $sessions_screen =~ /Alpha[ *+.]\[unknown\]/;
+die 'session identity nickname missing from picker' unless $sessions_screen =~ /Alpha[ *+.]\[personal\]/;
 die 'animated bold session title bar missing' unless $buf =~ /\e\[48;2;\d+;\d+;\d+m\e\[38;5;255m\e\[1m Codex: Sessions/;
 send_keys("\e[B\n");
 pump(0.5);
 my $session_actions=plain($buf);
-die 'session action menu missing' unless $session_actions =~ /Resume \(active for/;
-die 'session account fallback missing from action title' unless $session_actions =~ /Alpha \[unknown\]/;
+die 'session action menu missing' unless $session_actions =~ /Resume.*\(active for/;
+die 'session nickname missing from action title' unless $session_actions =~ /Alpha \[personal\]/;
 die 'action uptime is not gray and unbolded' unless $buf =~ /\e\[0m\e\[38;5;250m \(active for/;
 send_keys("\n");
 expect(qr/ATTACHED_CODEX.*ATTACHED_CODEX/s,'existing session attaches');
+send_keys("\e");
 send_keys("\e");
 send_keys("\e");
 finish();
@@ -457,7 +513,7 @@ start_case('menu');
 expect(qr/Codex:${gap}Resume${gap}\(codex\)/,'legacy codex resume label');
 expect(qr/Codex:${gap}Sessions/,'legacy codex enables sessions menu');
 my ($main_prefix)=plain($buf) =~ /\r([^\r\n]*?)●[ *+.]New Terminal/;
-die 'main menu centering includes the resume session name' unless defined($main_prefix) && length($main_prefix)==20;
+die 'main menu centering includes the resume session name' unless defined($main_prefix) && length($main_prefix)==27;
 send_keys("\e[B\n");
 expect(qr/ATTACHED_CODEX/,'resume action');
 my $legacy_marker=length $buf;

@@ -1,7 +1,7 @@
 # SATELLITE CLI
 
-A Bash menu for Codex tmux sessions, stopped shell jobs, and the Codex Switcher
-dashboard. Its animated star field adapts to your terminal size.
+A Bash launcher for Codex sessions and Codex Switcher's session manager.
+Its animated star field adapts to your terminal size.
 
 ![SATELLITE menu preview](media/menu-demo.gif)
 
@@ -27,12 +27,12 @@ and a current `codex-switcher` with enrolled accounts. Keep the same
 
 ## Use the menu
 
-Use Up/Down to choose an option and Enter or Space to select it. Esc goes back;
-in a submenu, Left focuses `◀— Back` and Right returns to the options. Text
-fields use Left/Right to move the cursor. The on-screen hints show the controls
-available on each screen.
+Use Up/Down to choose an option and Enter or Space to select it. Left focuses
+`◀— Back` in submenus; on the home screen, `◀—` expands to `◀— Exit`.
+Right returns to the options. Esc goes back or leaves the home menu for your
+shell. Text fields use Left/Right to move the cursor.
 
-- **New Terminal** returns to your shell. **Exit** exits that shell.
+- **New Terminal** returns to your shell. Selecting **Exit** closes that shell.
 - **Codex: New Session** appears when no sessions exist and asks for a unique
   name, starting directory, and account. The directory picker starts at your current
   directory, lets you browse or type a path, and can create a new directory.
@@ -41,37 +41,18 @@ available on each screen.
   marked `*`, and saved conversations marked `(inactive)`, newest first within
   each group when recency is available. The list updates live; working sessions
   have an animated indicator and remain selectable. Brackets show the enrolled
-  identity nickname. Session Details shows the underlying account provenance.
+  identity nickname. Select any session to open it directly in its original
+  account home. **[new session]** creates another session.
   Discovery failures are shown explicitly, with retained live rows marked unknown.
-- Open a session to **Resume** it, **Start** its exact saved conversation,
-  **Rename** its display label, **Move To Account**, **Relocate Project**, or
-  **Restart** its live terminal. Backends supporting **Pause Session** and
-  **Terminate** expose those actions too; Terminate retains the saved conversation.
-  Relocation can change the root directory or
-  move the whole folder, with a review before queueing. Switcher handles history,
-  permissions, account homes, safe stopping, storage checks, and recovery.
-  Saved conversations reopen in their original home, including the default Codex
-  home. Capacity warnings do not prevent opening context; Codex enforces limits
-  when you send work. The switcher dashboard also provides Open and Archives
-  recovery as a fallback.
-- **Codex Jobs** shows durable operation progress and full explanations. Review
-  numbered pause, background-task, and risk confirmations before responding.
-  Closing a screen leaves jobs running; Cancel Job requests cancellation before
-  the restart boundary. Recover Interrupted Job asks switcher to restore the
-  source when safe. Full Details includes retained backup and staging paths;
-  the menu never removes those directories.
-- **Codex: Account Switcher** opens the account dashboard. Automatic switching
-  remains unavailable. Delete is omitted until switcher exposes a safe backend
-  command for it.
-- **Jobs** manages stopped jobs from this shell. It is unavailable when none
-  exist.
+- **Session Manager**, below the session list, opens Codex Switcher. Manage
+  accounts, rename sessions, move projects, and handle operation progress,
+  confirmations, cancellation, and recovery there. Automatic account switching
+  remains unavailable.
 
 Detach from a Codex or dashboard tmux session with Ctrl+B, then D. The menu
 returns; the Sessions list keeps the same session selected. If Codex fails
 during startup, its pane keeps the error visible until you terminate it.
-Display aliases and menu-open recency are stored under
-`${XDG_STATE_HOME:-~/.local/state}/satellite-cli`; conversation history stays
-under switcher's control.
+Session names, recency, and conversation history are managed by switcher.
 
 ## Customize
 
@@ -90,7 +71,6 @@ bash tests/backend.bash
 bash tests/watch.bash
 bash tests/switcher.bash
 bash tests/session_focus.bash
-bash tests/move.bash
 bash tests/launch.bash
 bash tests/stars.bash
 perl tests/terminal.pl
@@ -103,5 +83,5 @@ benchmark commands are in [AGENTS.md](AGENTS.md).
 The backend contract is documented in Codex Switcher's
 `docs/CLI_MAIN_MENU_INTEGRATION.md`. The menu uses `sessions --all` and
 `sessions --all --watch` for inventory, `status --json` for account choices,
-`run --account` for new launches, `open --session ID` for saved conversations,
-and durable move/restart/relocate/pause/terminate jobs for changes.
+`run --account` for new launches, `open --session ID` for live or saved
+conversations, and `ui` for session management.

@@ -3,7 +3,9 @@
 
 function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index now live_suffix duration_output duration_suffix duration_color duration_col duration_row duration_width
-  local menu_back_focused=0 menu_has_back=0
+  local menu_back_focused=0 menu_has_back=0 menu_exit_control=0
+  local spinner_now spinner_row spinner_col spinner_color spinner_token
+  local -a spinner_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') spinner_seen=() menu_spacers=()
   local refresh_function='' refresh_at=0 menu_cleanup='' description='' description_output='' description_seen=''
   local -a menu_keys=() menu_threads=() busy_rows=() description_rows=()
   local watch_pid='' watch_fd='' watch_errors='' watch_partial='' watch_snapshot='' watch_failed=0 watch_started=0
@@ -61,6 +63,7 @@ function ez_menu_choose() (
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
     case $1 in
+      --exit-control) menu_has_back=1 menu_exit_control=1; shift ;;
       --refresh) refresh_function=$2; shift 2 ;;
       --description) description=$2; shift 2 ;;
       --screen-title)
@@ -95,6 +98,7 @@ function ez_menu_choose() (
         shift 3
         ;;
       --) shift; break ;;
+      --*) printf 'Unknown menu option: %s\n' "$1" >&2; return 2 ;;
       *) break ;;
     esac
   done
@@ -133,6 +137,7 @@ function ez_menu_choose() (
     [[ -z $description ]] || printf '%s\n\n' "$description" >&2
     index=0
     for label in "$@"; do
+      if [[ ${menu_spacers[index]:-0} == 1 ]]; then printf '\n' >&2; index=$((index+1)); continue; fi
       label_color=$C_WHITE number_color=$C_PINK weight='' note_text=''
       if (( ! menu_enabled[index] )); then
         label_color=$C_DISABLED number_color=$C_DISABLED_NUMBER weight=$C_STRIKE
@@ -145,7 +150,9 @@ function ez_menu_choose() (
         "$label_color" "$weight$label" "$C_RESET" "$label_color" "$note_text" "$C_RESET" >&2
       index=$((index + 1))
     done
+    (( ! menu_exit_control )) || printf '  0  Exit\n' >&2
     while IFS= read -r -p "  Choose [1-$count] > " key; do
+      if [[ $key == 0 ]] && (( menu_exit_control )); then printf exit; return; fi
       for ((index = 0; index < count; index++)); do
         if [[ $key == "$((index + 1))" ]] && (( menu_enabled[index] )); then
           printf '%s' "${menu_keys[index]-$index}"
@@ -209,8 +216,14 @@ function ez_menu_choose() (
       for index in "${!specified_accent_suffix[@]}"; do
         menu_accent_suffix[index]=${specified_accent_suffix[index]}
       done
+      for index in "${busy_rows[@]}"; do
+        # Reserve a gap and one cell immediately after the account label.
+        # The spinner is painted independently of timestamps below.
+        responsive_labels[index]+='  '
+        menu_gray_suffix[index]='  '
+      done
       for index in "${!specified_gray_suffix[@]}"; do
-        menu_gray_suffix[index]=${specified_gray_suffix[index]}
+        menu_gray_suffix[index]+=${specified_gray_suffix[index]}
         responsive_labels[index]+=${specified_gray_suffix[index]}
       done
       printf -v now '%(%s)T' -1
@@ -225,12 +238,6 @@ function ez_menu_choose() (
           'Codex: Resume ('*) menu_accent_suffix[index]=${label#'Codex: Resume'} ;;
           'Codex: Start ('*) menu_accent_suffix[index]=${label#'Codex: Start'} ;;
         esac
-      done
-      for index in "${busy_rows[@]}"; do
-        local spinner='|/-\\'
-        live_suffix=" (working ${spinner:SECONDS%4:1})"
-        responsive_labels[index]+=$live_suffix
-        menu_gray_suffix[index]+=$live_suffix
       done
       # Read the real terminal size: phone keyboards/app switching can change it.
       term_size=$(stty size <&2 2>/dev/null) || term_size=''
@@ -445,6 +452,30 @@ function ez_menu_choose() (
     elif [[ -n $frame ]]; then
       printf '\033[H%s' "$frame" >&2
     fi
+    if (( ${#busy_rows[@]} )); then
+      ez_stars_now
+      spinner_now=$((stars_now / 100))
+      for index in "${busy_rows[@]}"; do
+        (( index >= first && index < first + visible )) || continue
+        spinner_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
+        spinner_col=$((option_left + 4 + ${#original_labels[index]}))
+        (( spinner_col < COLUMNS )) || continue
+        spinner_color=$C_DISABLED_NUMBER
+        (( index != selected || menu_back_focused )) || spinner_color=$C_PINK
+        if (( ez_stars_animated )); then
+          # Match the account's closing bracket, including its current shimmer
+          # and selection fade, without adding a second animation engine.
+          spinner_token=${stars_cell_render[$(((spinner_row-1)*COLUMNS+spinner_col-3))]-}
+          [[ -z $spinner_token ]] || printf -v spinner_color '\033[38;2;%sm' "${spinner_token%%:*}"
+        fi
+        spinner_token="$spinner_row:$spinner_col:$spinner_color:${spinner_frames[spinner_now%10]}"
+        if [[ ${spinner_seen[index]-} != "$spinner_token" || -n $frame || -n ${duration_output:-} ]] || (( option_frame )); then
+          printf '\033[%d;%dH%s%s%s' "$spinner_row" "$spinner_col" "$C_RESET$spinner_color" "${spinner_frames[spinner_now%10]}" "$C_RESET" >&2
+          spinner_seen[index]=$spinner_token
+        fi
+      done
+      (( ez_stars_animated )) || input_timeout=0.1
+    fi
     if IFS= read -rsn1 -t "$input_timeout" key; then
       :
     else
@@ -453,7 +484,10 @@ function ez_menu_choose() (
       return 130
     fi
     case $key in
-      ''|' ') if (( menu_back_focused )); then return 130; fi
+      ''|' ') if (( menu_back_focused )); then
+            if (( menu_exit_control )); then printf exit; return; fi
+            return 130
+          fi
           printf '%s' "${menu_keys[selected]-$selected}"; return ;;
       $'\033')
         # Accept both normal (CSI) and application-mode (SS3) arrow keys.
@@ -494,9 +528,9 @@ function ez_menu_choose() (
 ez_menu_refresh_view() {
   local key=${menu_keys[selected]-} thread=${menu_threads[selected]-} index found=0
   local before after
-  before=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows description screen_title disabled_indices)
+  before=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows menu_spacers description screen_title disabled_indices)
   "$refresh_function" || :
-  after=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows description screen_title disabled_indices)
+  after=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows menu_spacers description screen_title disabled_indices)
   count=${#original_labels[@]}
   (( count )) || return 0
   menu_enabled=() enabled_count=0

@@ -237,6 +237,7 @@ function ez_stars_baseline_mask() {
     done
   fi
   for ((index = first; index < first + visible && index < ${#labels[@]}; index++)); do
+    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     row=$((banner_count + 3 + index - first))
     (( row >= LINES )) && break
     cell=$(((row - 1) * COLUMNS + option_left + 1))
@@ -281,7 +282,7 @@ function ez_stars_text_layout() {
   stars_repair_active=0
   stars_work_ready=0 stars_work_dirty=1
   local banner_count=$1 title_width=$2 margin=$3 compact=$4 first=$5 selected=$6
-  local row col cell line index text style fade hint_width=0 left=$(( (COLUMNS - title_width) / 2 ))
+  local row col cell line index text style fade back_col hint_width=0 left=$(( (COLUMNS - title_width) / 2 ))
   local -a letters=("${title_rows[@]}")
   local -a old_cells=("${!stars_text_char[@]}")
   local -a old_occluded=("${!stars_occluded[@]}") labels=("${@:7}")
@@ -321,8 +322,8 @@ function ez_stars_text_layout() {
   done
   if (( ${menu_has_back:-0} && option_left > 0 )); then
     row=$((banner_count + 3))
-    left=$((option_left >= 8 ? option_left - 8 : 0))
-    for ((col=left;col<left+7 && col<option_left;col++)); do
+    back_col=$((option_left >= 8 ? option_left - 8 : 0))
+    for ((col=back_col;col<back_col+7 && col<option_left;col++)); do
       cell=$(((row - 1) * COLUMNS + col))
       stars_occluded[$cell]=1
     done
@@ -345,6 +346,7 @@ function ez_stars_text_layout() {
     done
   done
   for ((index = first; index < first + visible; index++)); do
+    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     row=$((banner_count + 3 + index - first))
     (( row >= LINES )) && break
     style=0 fade=100
@@ -477,6 +479,7 @@ function ez_stars_build_work() {
 function ez_stars_select() {
   local first=$1 selected=$2 banner_count=$3 index cell style fade char
   for ((index = first; index < first + visible; index++)); do
+    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     cell=$(((banner_count + 2 + index - first) * COLUMNS + option_left))
     style=0 fade=100 char='○'
     if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;

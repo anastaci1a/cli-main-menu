@@ -8,15 +8,13 @@ function ez_menu_define_items() {
     menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" 'Codex: Sessions|ez_menu_codex_sessions|stay')
   else
     menu_items+=('Codex: New Session|ez_codex_new|stay')
-    # Keep discovery errors and durable jobs reachable even without a live row.
+    # Keep discovery errors and Session Manager reachable without a live row.
     if ez_switcher_available; then
       if [[ -n ${ez_switcher_error:-} ]]; then
         menu_items+=('Codex: Sessions (disconnected)|ez_menu_codex_sessions|stay')
       else menu_items+=('Codex: Sessions|ez_menu_codex_sessions|stay'); fi
     fi
   fi
-  menu_items+=('Codex: Account Switcher|ez_menu_codex_monitor|stay|ez_menu_codex_monitor_available|(unavailable)')
-  menu_items+=('Jobs|ez_menu_jobs|stay|ez_menu_has_stopped_jobs|(no stopped jobs)' 'Exit|exit|close')
 }
 
 function ez_select() {
@@ -46,10 +44,14 @@ function ez_select() {
       menu_behaviors+=("$behavior")
       menu_availability+=("$enabled_when")
     done
-    if ! selected=$(ez_menu_choose "$selected" "$banner" --disabled "$disabled_indices" "${menu_choice_args[@]}" -- "${menu_labels[@]}"); then
+    if ! selected=$(ez_menu_choose "$selected" "$banner" --exit-control --disabled "$disabled_indices" "${menu_choice_args[@]}" -- "${menu_labels[@]}"); then
       (( ez_menu_shared_screen )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
       printf '\n'
       return
+    fi
+    if [[ $selected == exit ]]; then
+      (( ez_menu_shared_screen )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
+      exit
     fi
     label=${menu_labels[selected]}
     action=${menu_actions[selected]}

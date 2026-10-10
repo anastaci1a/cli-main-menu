@@ -13,32 +13,6 @@ ez_codex_name_chars() {
   done
 }
 
-ez_codex_alias_file() {
-  printf '%s/satellite-cli/session-names.tsv' "${XDG_STATE_HOME:-$HOME/.local/state}"
-}
-ez_codex_alias_read() {
-  local wanted=$1 key alias file
-  REPLY=''
-  file=$(ez_codex_alias_file)
-  [[ -f $file ]] || return 1
-  while IFS=$'\t' read -r key alias; do
-    if [[ $key == "$wanted" ]]; then REPLY=$alias; return 0; fi
-  done < "$file"
-  return 1
-}
-ez_codex_alias_save() {
-  local wanted=$1 alias=$2 file dir temp key old
-  file=$(ez_codex_alias_file); dir=${file%/*}
-  (umask 077; mkdir -p -- "$dir") || return 1
-  temp=$(umask 077; mktemp -- "$dir/.session-names.XXXXXXXX") || return 1
-  if [[ -f $file ]]; then
-    while IFS=$'\t' read -r key old; do
-      [[ $key == "$wanted" ]] || printf '%s\t%s\n' "$key" "$old" >> "$temp"
-    done < "$file"
-  fi
-  printf '%s\t%s\n' "$wanted" "$alias" >> "$temp"
-  mv -f -- "$temp" "$file"
-}
 ez_codex_duration() {
   local seconds=$1 days hours minutes
   (( seconds < 0 )) && seconds=0

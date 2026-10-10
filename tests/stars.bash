@@ -842,3 +842,21 @@ printf 'PASS foreground repairs suppress redundant deltas while retaining exact 
   [[ $stars_prefetch_cursor == "$stars_prefetch_budget" ]]
 )
 printf 'PASS bounded adaptive color preparation, including a nearly expired idle window\n'
+
+(
+  COLUMNS=80 LINES=24 visible=3 menu_has_back=1 menu_exit_control=1
+  title_rows=(TITLE) hint_rows=(Controls)
+  original_labels=(One '' Manager) menu_layout_labels=("${original_labels[@]}")
+  menu_enabled=(1 0 1) menu_spacers=([1]=1)
+  read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${original_labels[@]}")
+  ez_stars_init
+  ez_stars_layout 6 1 5 2 3 0 "${original_labels[@]}"
+  ez_stars_text_layout 6 5 2 0 0 0 "${original_labels[@]}"
+  # Reserving the Exit/Back control must not shift the title's text mask.
+  [[ ${stars_text_char[$((4*80+37))]} == T ]]
+  separator_cell=$((9*80+option_left))
+  [[ ! ${stars_text_char[$separator_cell]+set} && ! ${stars_baseline_blocked[separator_cell+1]+set} ]]
+  ez_stars_select 0 2 6
+  [[ ! ${stars_text_char[$separator_cell]+set} ]]
+)
+printf 'PASS home arrow preserves title centering and separators stay free of markers\n'

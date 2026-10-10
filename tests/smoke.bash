@@ -56,6 +56,9 @@ clear() { :; }
 tmux() { [[ $1 == has-session ]] && return 1; return 99; }
 output=$(eval startup <<< 1 2>&1)
 [[ $output == *'Ready when you are.'* ]]
+[[ $output != *--exit-control* && $output != *--disabled* ]]
+[[ $output == *'0  Exit'* && $output != *'Codex: Account Switcher'* && $output != *'no stopped jobs'* ]]
+[[ $(printf '0\n' | ez_menu_choose 0 Test --exit-control --disabled '' -- One Two 2>/dev/null) == exit ]]
 printf 'PASS source/reload/startup: %s\n' "$1"
 BASH
   )

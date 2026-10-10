@@ -3,8 +3,8 @@
 This directory is the Git repository; the integrating `.bashrc` is two levels
 above it. Use `apply_patch` for edits. Preserve unrelated `.bashrc` content,
 public entry points, and the module split. `switcher.bash` validates backend
-JSON; `session-menu.bash` owns session presentation/actions; `sessions.bash`
-contains text/path input widgets and display aliases.
+JSON; `session-menu.bash` owns session presentation/opening; `sessions.bash`
+contains text/path input widgets.
 
 ## Loading and behavior
 
@@ -20,21 +20,20 @@ contains text/path input widgets and display aliases.
   and indivisible notes; responsive hints; and numbered non-TTY selection.
 - Run actions in the calling shell so `fg` sees its jobs. Isolate only the
   selector. Skip disabled choices in both directions and reject them in the
-  numeric fallback. Jobs availability means stopped jobs in that shell.
+  numeric fallback. Blank separator rows have no marker and cannot take focus.
 - Use switcher's `docs/CLI_MAIN_MENU_INTEGRATION.md` contract. Inventory and
   activity come only from `sessions`; failed/malformed discovery is not empty
   success, and missing activity is unknown. Keep busy rows selectable. Track
   selection by backend ID with exact-thread fallback after a lifecycle change.
 - Display `display_account` with `account` fallback; only `account` represents
   home provenance. Use `run --account` for new launches and `open --session ID`
-  for saved history, attaching the returned target. Never substitute a display
+  for live or saved history, attaching the returned exact target. Never substitute a display
   nickname for the source home. Capacity is a warning, not a launch prohibition.
   No implicit account fallback or `resume --last`. Automatic switching stays off.
-- Queue account moves, restarts, relocation, and supported pause/termination
-  operations through switcher. Always show
-  relocation dry-run review. Explicitly answer each `awaiting_*` prompt using
-  its displayed `confirmation_seq`; never silently retry a stale approval.
-  Show full detail, cancellation, recovery and retained paths. UI exit stops
+- Selecting a session opens it directly. Session Manager launches switcher `ui`;
+  do not duplicate its session actions, durable jobs, or confirmation screens.
+  Use switcher's persistent `name` and `last_accessed` (milliseconds) for labels
+  and recency, preserving busy/unknown, idle, inactive grouping. UI exit stops
   only its owned inventory watcher, never a durable worker or Codex process.
 - Do not read credentials, databases, or rollouts; copy histories; stop/steer
   Codex; or move project files here. tmux is only for creation, attachment, and
@@ -67,8 +66,7 @@ contains text/path input widgets and display aliases.
   focused regression check for new behavior. Run `bash tests/stars.bash` for
   animation changes; use simulated times instead of sleeps. Run the relevant
   `tests/backend.bash`, `tests/watch.bash`, `tests/switcher.bash`,
-  `tests/session_focus.bash`, and `tests/launch.bash` for session changes;
-  run `tests/move.bash` for durable job/relocation changes.
+  `tests/session_focus.bash`, and `tests/launch.bash` for session changes.
 - Stub tmux/Codex or use isolated test sockets. Never attach, resume, or
   terminate the user's live sessions or jobs in tests.
 - For performance work, use `tools/benchmark.bash`,

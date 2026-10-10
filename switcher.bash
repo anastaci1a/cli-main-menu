@@ -33,6 +33,7 @@ ez_switcher_inventory_filter='
       (.name | type == "string") and (.cwd | type == "string") and
       (.account | type == "string") and
       (.display_account == null or (.display_account | type == "string")) and
+      (.last_accessed == null or (.last_accessed | type == "number")) and
       (.lifecycle == "live" or .lifecycle == "inactive") and
       (if .lifecycle == "live" then (.pane | type == "string" and test("^%[0-9]+$"))
        else (.thread_id | type == "string" and test("^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")) end))) |
@@ -99,30 +100,6 @@ ez_switcher_accounts() {
   fi
 }
 
-ez_switcher_job_filter='select(type == "object" and (.id | type == "string" and length > 0) and
-  (.phase | type == "string" and length > 0) and (.detail | type == "string"))'
-
-ez_switcher_jobs() {
-  ez_switcher_request "select(type == \"array\") | select(all(.[]; [$ez_switcher_job_filter] | length == 1))" moves
-}
-
-ez_switcher_queue() {
-  ez_switcher_request "$ez_switcher_job_filter" "$@"
-}
-
-ez_switcher_respond() {
-  local id=$1 answer=$2 sequence=$3
-  [[ $answer == yes || $answer == no ]] && [[ $sequence =~ ^[0-9]+$ ]] || {
-    ez_switcher_error='This confirmation has no valid sequence number. Refresh the job.'; return 1;
-  }
-  # Never retry with a newer sequence: the user approved only the displayed dialog.
-  ez_switcher_request 'select(type == "object")' move-response "$id" "$answer" --sequence "$sequence"
-}
-
-ez_switcher_terminal_phase() {
-  case $1 in complete|failed|cancelled|recovered) return 0;; *) return 1;; esac
-}
-
 # Select by the backend key, with exact-thread fallback after a saved row goes live.
 ez_switcher_find() {
   local snapshot=$1 key=$2 thread=${3-}
@@ -130,19 +107,4 @@ ez_switcher_find() {
     ([.sessions[] | select(.id == $key and ($thread == "" or .thread_id == $thread))][0] //
      (if $thread != "" then [.sessions[] | select(.thread_id == $thread)][0] else null end)) // empty
   ' <<< "$snapshot")
-}
-
-# Operations use pane/thread provenance, never a display nickname or tmux title.
-ez_switcher_source() {
-  local row=$1 lifecycle pane thread
-  lifecycle=$(jq -r '.lifecycle' <<< "$row")
-  if [[ $lifecycle == live ]]; then
-    pane=$(jq -r '.pane' <<< "$row")
-    [[ $pane =~ ^%[0-9]+$ ]] || return 1
-    ez_switcher_source_args=(--pane "$pane")
-  else
-    thread=$(jq -r '.thread_id' <<< "$row")
-    [[ $thread =~ ^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$ ]] || return 1
-    ez_switcher_source_args=(--thread "$thread")
-  fi
 }

@@ -10,10 +10,12 @@ if [[ $1 == menu || $1 == switcher_menu || $1 == switcher_ready || $1 == switche
       sessions)
         if [[ -n ${TEST_SESSION_FILE:-} && -s $TEST_SESSION_FILE ]]; then
           IFS= read -r fixture_name < "$TEST_SESSION_FILE"
-          jq -n --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:$name,tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
+          jq -n --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:($name | sub("^codex-";"")),tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
         else printf '{"schema_version":1,"observed_at":100,"sessions":[]}\n'; fi ;;
       status) printf '{"schema_version":1,"daemon":{"running":true},"accounts":[{"name":"personal","eligible":true}]}' ;;
-      moves) printf '[]\n' ;;
+      open)
+        IFS= read -r fixture_name < "$TEST_SESSION_FILE"
+        jq -n --arg name "$fixture_name" '{schema_version:1,session:{pane:"%0",tmux_session:$name}}' ;;
       ready)
         printf 'READY\n' >> "$TEST_SWITCHER_LOG"
         return "${TEST_SWITCHER_READY:-1}"
@@ -33,7 +35,7 @@ LINES=24
 clear() { :; }
 tmux() {
   case $1 in
-    list-panes) printf '%%0|100|200\n' ;;
+    list-panes) printf '%%0|100\n%%1|100\n' ;;
     display-message) printf '100\n' ;;
     select-pane|select-window) : ;;
     list-sessions)
@@ -76,7 +78,8 @@ tmux() {
   esac
 }
 case $1 in
-  backend_live)
+  backend_live|backend_static)
+    [[ $1 != backend_static ]] || EZ_MENU_ANIMATE_STARS=0
     PATH="$TEST_BACKEND_BIN:$PATH"
     selected=$(ez_menu_choose 0 '' --screen-title 'Codex: Sessions' --refresh ez_codex_sessions_refresh -- Refresh)
     printf 'SELECTED=%s\n' "$selected"

@@ -130,7 +130,8 @@ function ez_menu_hint_lines() {
   case $context in
     main|submenu)
       if [[ $context == main ]]; then
-        (( count > 1 )) && hints+=('▲/▼: Move')
+        if (( ${menu_exit_control:-0} )); then hints+=('▲/▼/◀/▶: Move')
+        elif (( count > 1 )); then hints+=('▲/▼: Move'); fi
         hints+=('Enter/Space: Select' 'Esc: Exit')
       else
         if (( count > 1 )); then hints+=('▲/▼/◀/▶: Move')
@@ -258,12 +259,26 @@ function ez_menu_overlay_text() {
   return 0
 }
 
+# Both submenu Back and home Exit share focus, color and placement rules.
+function ez_menu_back_control() {
+  local screen_row=$1 indent=$2 back_col back_text='◀—' back_weight='' back_color=$C_GRAY
+  back_col=$((indent >= 3 ? indent - 3 : 0))
+  if (( ${menu_back_focused:-0} )); then
+    back_weight=$C_BOLD back_color=$C_WHITE
+    if (( indent >= 8 )); then
+      back_col=$((indent - 8)) back_text='◀— Back'
+      (( ! ${menu_exit_control:-0} )) || back_text='◀— Exit'
+    fi
+  fi
+  printf '\033[%d;%dH%s%s%s%s\033[%d;1H' "$screen_row" "$((back_col+1))" "$back_color" "$back_weight" "$back_text" "$C_RESET" "$((screen_row+1))"
+}
+
 function ez_menu_draw() {
   # Only the chooser opts into reusing its measured geometry. Standalone calls
   # keep measuring their own arguments, even if unrelated outer variables exist.
   local -a cached_geometry=("${marker_width-}" "${label_width-}" "${option_block_width-}" "${option_left-}" "${option_right-}")
   local selected=$1 first=$2 visible=$3 index label marker weight marker_weight label_color label_padding
-  local marker_color note note_text accent_suffix gray_suffix prefix_length accent_end base_label screen_row back_col back_text back_weight back_color styled_label
+  local marker_color note note_text accent_suffix gray_suffix prefix_length accent_end base_label screen_row styled_label
   local label_width marker_width option_block_width indent right_width row_label_width row_right_width hint hint_width=0 page
   local left_stars right_stars
   local -a labels hints
@@ -276,6 +291,17 @@ function ez_menu_draw() {
     read -r marker_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
   fi
   for ((index = first; index < first + visible; index++)); do
+    if [[ ${menu_spacers[index]:-0} == 1 ]]; then
+      if (( ${ez_stars_animated:-0} )); then
+        printf '\r'
+        ez_stars_render_span "$(( ${#fitted_rows[@]} + 3 + index - first ))" 0 "$COLUMNS"
+      else printf '\r\033[2K'; fi
+      printf '\r\n'
+      if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
+        ez_menu_back_control "$(( ${#fitted_rows[@]} + 3 ))" "$indent"
+      fi
+      continue
+    fi
     label=${labels[index]}
     accent_suffix=${menu_accent_suffix[index]-} gray_suffix=${menu_gray_suffix[index]-}
     row_label_width=$label_width row_right_width=$right_width
@@ -322,11 +348,7 @@ function ez_menu_draw() {
       ez_stars_render_span "$screen_row" "$((indent + marker_width + 1 + ${#label} + ${#note_text}))" "$(( ${#label_padding} + row_right_width ))"
       printf '\r\n'
       if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
-        back_col=$((indent >= 3 ? indent - 3 : 0)) back_text='◀—'
-        if (( ${menu_back_focused:-0} && indent >= 8 )); then back_col=$((indent - 8)); back_text='◀— Back'; fi
-        back_weight='' back_color=$C_GRAY
-        if (( ${menu_back_focused:-0} )); then back_weight=$C_BOLD; back_color=$C_WHITE; fi
-        printf '\033[%d;%dH%s%s%s%s\033[%d;1H' "$screen_row" "$((back_col+1))" "$back_color" "$back_weight" "$back_text" "$C_RESET" "$((screen_row+1))"
+        ez_menu_back_control "$screen_row" "$indent"
       fi
       continue
     fi
@@ -342,11 +364,7 @@ function ez_menu_draw() {
       "$left_stars" "$marker_color" "$marker_weight" "$marker" "$C_RESET" \
       "$styled_label" "$label_color" "$note_text" "$C_RESET" "$label_padding$right_stars"
     if (( ${menu_has_back:-0} && index == first && indent > 0 )); then
-      back_col=$((indent >= 3 ? indent - 3 : 0)) back_text='◀—'
-      if (( ${menu_back_focused:-0} && indent >= 8 )); then back_col=$((indent - 8)); back_text='◀— Back'; fi
-      back_weight='' back_color=$C_GRAY
-      if (( ${menu_back_focused:-0} )); then back_weight=$C_BOLD; back_color=$C_WHITE; fi
-      printf '\033[%d;%dH%s%s%s%s\033[%d;1H' "$screen_row" "$((back_col+1))" "$back_color" "$back_weight" "$back_text" "$C_RESET" "$((screen_row+1))"
+      ez_menu_back_control "$screen_row" "$indent"
     fi
   done
   if (( ${ez_stars_animated:-0} )); then

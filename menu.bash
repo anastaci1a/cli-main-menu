@@ -3,9 +3,11 @@
 
 function ez_menu_define_items() {
   # Uses the caller's menu_items array so the preview can render these same rows.
+  local sessions_label='Codex: Sessions'
   menu_items=('New Terminal|ez_menu_terminal|close')
   if ez_menu_has_codex; then
-    menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" 'Codex: Sessions|ez_menu_codex_sessions|stay')
+    [[ -z ${ez_switcher_error:-} ]] || sessions_label+=' (disconnected)'
+    menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" "$sessions_label|ez_menu_codex_sessions|stay")
   else
     menu_items+=('Codex: New Session|ez_codex_new|stay')
     # Keep discovery errors and Session Manager reachable without a live row.
@@ -17,42 +19,72 @@ function ez_menu_define_items() {
   fi
 }
 
+# Shared by the caller and the home refresh hook, so a changing inventory cannot
+# leave the action for an updated label pointing at the previous menu state.
+ez_menu_prepare_items() {
+  local entry label action behavior enabled_when disabled_note
+  ez_menu_define_items
+  menu_labels=() menu_actions=() menu_behaviors=() menu_availability=() menu_choice_args=()
+  disabled_indices=''
+  for entry in "${menu_items[@]}"; do
+    IFS='|' read -r label action behavior enabled_when disabled_note <<< "$entry"
+    if [[ -n $enabled_when ]] && ! "$enabled_when"; then
+      disabled_indices+="${#menu_labels[@]} "
+      [[ -z $disabled_note ]] || menu_choice_args+=(--disabled-note "${#menu_labels[@]}" "$disabled_note")
+    fi
+    menu_labels+=("$label") menu_actions+=("$action") menu_behaviors+=("$behavior") menu_availability+=("$enabled_when")
+  done
+}
+
+ez_menu_home_refresh() {
+  local status index
+  local -a menu_items menu_labels menu_actions menu_behaviors menu_availability menu_choice_args
+  if ez_codex_poll_inventory; then :
+  else
+    status=$?
+    (( status != 1 )) || return 1
+    (( status != 130 )) || return 130
+    description="Discovery Disconnected: $ez_switcher_error"
+  fi
+  [[ -n $ez_switcher_error ]] || description=''
+  ez_menu_prepare_items
+  original_labels=("${menu_labels[@]}") menu_keys=() menu_disabled_notes=()
+  for index in "${!original_labels[@]}"; do menu_keys+=("$index"); done
+  for ((index=0;index<${#menu_choice_args[@]};index+=3)); do
+    menu_disabled_notes[${menu_choice_args[index+1]}]=${menu_choice_args[index+2]}
+  done
+}
+
 function ez_select() {
   local ez_codex_start_dir=$PWD
+  local ez_codex_snapshot='' ez_codex_snapshot_at=-100 ez_switcher_error='' ez_menu_choice='' ez_codex_menu_active=1
   local ez_menu_shared_screen=0
   local selected=0 label action behavior status banner entry enabled_when disabled_indices disabled_note
-  local -a menu_items menu_labels menu_actions menu_behaviors menu_availability menu_choice_args
+  local -a menu_items menu_labels menu_actions menu_behaviors menu_availability menu_choice_args refresh_args
   if [[ -t 0 && -t 2 && ${TERM:-dumb} != dumb ]]; then
     ez_menu_shared_screen=1
     printf '\033[?1049h\033[?25l' >&2
+    ez_stars_prepare_curves "${EZ_MENU_SWEEP_DURATION_MS:-1467}"
   fi
-  banner=$(ez_menu_banner)
+  if (( ez_menu_shared_screen )) && [[ ${EZ_MENU_ANIMATE_STARS:-1} == 1 ]]; then
+    banner=$(ez_stars_animated=1 ez_menu_banner)
+  else banner=$(ez_menu_banner); fi
   while :; do
-    ez_menu_define_items
-    menu_labels=() menu_actions=() menu_behaviors=() menu_availability=() menu_choice_args=()
-    disabled_indices=''
-    for entry in "${menu_items[@]}"; do
-      IFS='|' read -r label action behavior enabled_when disabled_note <<< "$entry"
-      if [[ -n $enabled_when ]] && ! "$enabled_when"; then
-        disabled_indices+="${#menu_labels[@]} "
-        if [[ -n $disabled_note ]]; then
-          menu_choice_args+=(--disabled-note "${#menu_labels[@]}" "$disabled_note")
-        fi
-      fi
-      menu_labels+=("$label")
-      menu_actions+=("$action")
-      menu_behaviors+=("$behavior")
-      menu_availability+=("$enabled_when")
-    done
-    if ! selected=$(ez_menu_choose "$selected" "$banner" --exit-control --disabled "$disabled_indices" "${menu_choice_args[@]}" -- "${menu_labels[@]}"); then
+    (( ez_menu_shared_screen )) || ez_codex_inventory || :
+    ez_menu_prepare_items
+    refresh_args=()
+    if (( ez_menu_shared_screen )) && ez_switcher_available; then refresh_args=(--refresh ez_menu_home_refresh); fi
+    if ! ez_codex_choose "$selected" "$banner" --exit-control --disabled "$disabled_indices" "${menu_choice_args[@]}" "${refresh_args[@]}" -- "${menu_labels[@]}"; then
       (( ez_menu_shared_screen )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
       printf '\n'
       return
     fi
+    selected=$ez_menu_choice
     if [[ $selected == exit ]]; then
       (( ez_menu_shared_screen )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
       exit
     fi
+    ez_menu_prepare_items
     label=${menu_labels[selected]}
     action=${menu_actions[selected]}
     behavior=${menu_behaviors[selected]}

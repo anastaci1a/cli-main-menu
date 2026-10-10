@@ -3,10 +3,10 @@
 
 function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index now live_suffix duration_output duration_suffix duration_color duration_col duration_row duration_width
-  local menu_back_focused=0 menu_has_back=0 menu_exit_control=0
+  local menu_back_focused=0 menu_has_back=0 menu_exit_control=0 menu_pending_input=''
   local spinner_now spinner_row spinner_col spinner_color spinner_token spinner_output
   local -a spinner_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') spinner_seen=() menu_spacers=()
-  local refresh_function='' refresh_at=0 menu_cleanup='' description='' description_output='' description_seen=''
+  local refresh_function='' refresh_at=0 menu_cleanup='' menu_state_output='' description='' description_output='' description_seen=''
   local -a menu_keys=() menu_threads=() busy_rows=() description_rows=()
   local watch_pid='' watch_fd='' watch_errors='' watch_partial='' watch_snapshot='' watch_failed=0 watch_started=0
   local disabled_indices='' enabled_count=0 direction attempts label_color weight number_color note note_text
@@ -17,7 +17,7 @@ function ez_menu_choose() (
   local header_line='' header_output='' header_seen='' header_token
   local first=0 visible available_rows frame row frame_banner
   local term_size term_lines term_columns hint_count main_banner=0 screen_title=''
-  local terminal_state
+  local terminal_state='' terminal_started=0
   local compact star_margin title_height title_width cached_columns=0 cached_lines=0 cached_compact=-1 cached_margin=-1
   local star_cache_key='' new_star_key star_row brightness left_gutter right_gutter
   local marker_width label_width option_block_width option_left option_right
@@ -59,12 +59,13 @@ function ez_menu_choose() (
   local -a banner_rows title_rows fitted_rows hint_rows menu_star_left menu_star_right menu_enabled=() menu_disabled_notes=()
   local -a duration_created=() duration_prefix=() duration_mode=() specified_accent_suffix=() specified_gray_suffix=() menu_accent_suffix=() menu_gray_suffix=() last_labels=() menu_layout_labels=() changed_durations=()
   shift 2
-  trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"' EXIT
+  trap ez_menu_choose_cleanup EXIT
   # Optional disabled indices keep availability separate from labels/actions.
   while (( $# )); do
     case $1 in
       --exit-control) menu_has_back=1 menu_exit_control=1; shift ;;
       --refresh) refresh_function=$2; shift 2 ;;
+      --return-state) menu_state_output=$2; shift 2 ;;
       --description) description=$2; shift 2 ;;
       --screen-title)
         (( $# >= 2 )) || return 1
@@ -104,8 +105,17 @@ function ez_menu_choose() (
   done
   local count=$#
   local -a original_labels=("$@") responsive_labels
+  # Suppress echo and establish cleanup before discovery or rendering can block.
+  if [[ -t 0 && -t 2 && ${TERM:-dumb} != dumb ]]; then
+    terminal_state=$(stty -g <&0 2>/dev/null) || return 130
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+    trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH
+    trap 'stty -echo -echonl <&0 2>/dev/null; redraw=1; layout_dirty=1; full_redraw=1' CONT
+    stty -echo -echonl <&0 || return 130
+  fi
   if [[ -n $refresh_function ]]; then
-    "$refresh_function" || :
+    "$refresh_function" || { read_status=$?; (( read_status != 130 )) || return 130; }
     count=${#original_labels[@]}
     refresh_at=$((SECONDS+2))
   fi
@@ -167,20 +177,7 @@ function ez_menu_choose() (
     return 130
   fi
 
-  # read -s only suppresses echo during the read itself. Keep it off while
-  # rendering too, so queued arrow bytes never appear as literal ^[[A text.
-  terminal_state=$(stty -g <&0 2>/dev/null) || return 130
-  # Restore the exact input modes before launching an action (including tmux/fg).
-  if (( ${ez_menu_shared_screen:-0} )); then
-    trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"; stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m" >&2' EXIT
-  else
-    trap '[[ -z $menu_cleanup ]] || "$menu_cleanup"; stty "$terminal_state" <&0 2>/dev/null; printf "\033[?1004l\033[0m\033[?25h\033[?1049l" >&2' EXIT
-  fi
-  trap 'exit 130' INT
-  trap 'exit 143' TERM HUP
-  trap 'redraw=1; layout_dirty=1; full_redraw=1' WINCH
-  trap 'stty -echo -echonl <&0 2>/dev/null; redraw=1; layout_dirty=1; full_redraw=1' CONT
-  stty -echo -echonl <&0 || return 130
+  terminal_started=1
   if (( ${ez_menu_shared_screen:-0} )); then
     printf '\033[?1004h\033[?25l\033[H' >&2
   else
@@ -196,8 +193,10 @@ function ez_menu_choose() (
     ez_stars_animated=1 input_timeout=0.05
     ez_stars_init
   fi
-  mapfile -t title_rows < <(ez_menu_title_rows)
-  title_width=${#title_rows[0]}
+  if [[ -z $screen_title ]]; then
+    mapfile -t title_rows < <(ez_menu_title_rows)
+    title_width=${#title_rows[0]}
+  else title_rows=() title_width=0; fi
   (( selected >= count )) && selected=0
   while :; do
     frame='' status_output='' spinner_output='' option_frame=0 changed_durations=()
@@ -309,9 +308,13 @@ function ez_menu_choose() (
         fi
         frame_banner=$banner
         mapfile -t fitted_rows <<< "$frame_banner"
-        for ((index = 0; index < ${#fitted_rows[@]}; index++)); do
-          fitted_rows[index]=$(ez_menu_clip "${fitted_rows[index]}" "$COLUMNS")
-        done
+        # Animated frames use the measured row count and render their own cells;
+        # clipping these unused ANSI placeholders would fork once per row.
+        if (( ! ez_stars_animated )); then
+          for ((index = 0; index < ${#fitted_rows[@]}; index++)); do
+            fitted_rows[index]=$(ez_menu_clip "${fitted_rows[index]}" "$COLUMNS")
+          done
+        fi
         available_rows=$((LINES - ${#fitted_rows[@]} - hint_count - 4))
         (( available_rows < 1 )) && available_rows=1
         visible=$count
@@ -486,7 +489,7 @@ function ez_menu_choose() (
     printf '%s%s%s%s%s%s%s' "$status_output" "$header_output" "$frame" "${stars_output:-}" "${duration_output:-}" "$description_output" "$spinner_output" >&2
     # An opt-out from animation must not delay the first discovery snapshot.
     if (( ! ez_stars_animated )) && [[ -n $watch_fd && $watch_failed == 0 ]]; then input_timeout=0.1; fi
-    if IFS= read -rsn1 -t "$input_timeout" key; then
+    if ez_menu_read_character "$input_timeout" key; then
       :
     else
       read_status=$?
@@ -501,11 +504,11 @@ function ez_menu_choose() (
           printf '%s' "${menu_keys[selected]-$selected}"; return ;;
       $'\033')
         # Accept both normal (CSI) and application-mode (SS3) arrow keys.
-        IFS= read -rsn1 -t 0.08 next || return 130
+        ez_menu_read_character 0.08 next || return 130
         [[ $next == $'\033' ]] && return 130
         [[ $next == '[' || $next == O ]] || continue
         sequence=''
-        while IFS= read -rsn1 -t 0.08 next; do
+        while ez_menu_read_character 0.08 next; do
           sequence+=$next
           [[ $next == [a-zA-Z~] || ${#sequence} -ge 16 ]] && break
         done
@@ -533,12 +536,32 @@ function ez_menu_choose() (
   return 130
 )
 
+ez_menu_read_character() {
+  local character
+  if [[ -n $menu_pending_input ]]; then
+    character=${menu_pending_input:0:1} menu_pending_input=${menu_pending_input:1}
+    [[ $character != $'\n' ]] || character=''
+    printf -v "$2" '%s' "$character"
+  else IFS= read -rsn1 -t "$1" "$2"; fi
+}
+
+ez_menu_choose_cleanup() {
+  [[ -z $menu_cleanup ]] || "$menu_cleanup"
+  [[ -z $terminal_state ]] || stty "$terminal_state" <&0 2>/dev/null
+  if (( terminal_started )); then
+    if (( ${ez_menu_shared_screen:-0} )); then printf '\033[?1004l\033[0m' >&2
+    else printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2; fi
+  fi
+  # Opt-in callers can recover read-only state from the isolated chooser even
+  # on Back. Ordinary callers still receive only the selected key on stdout.
+  [[ -z $menu_state_output ]] || "$menu_state_output"
+}
+
 # Refresh presentation in the chooser's own scope, preserving selection by identity.
 # Hooks replace the arrays in place; a stable view leaves animation/layout intact.
 ez_menu_refresh_view() {
   local key=${menu_keys[selected]-} thread=${menu_threads[selected]-} index found=0
-  # Returning from attach can precede the watcher's first snapshot. Keep the
-  # requested identity until it arrives, unless the user has moved meanwhile.
+  # Respect the requested conversation identity after a lifecycle change.
   if [[ -n ${session_selection:-} ]]; then key=$session_selection; thread=${session_selection_thread:-}; fi
   local before after
   before=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows menu_spacers description screen_title disabled_indices)

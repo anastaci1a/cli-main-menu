@@ -43,6 +43,7 @@ shell. Text fields use Left/Right to move the cursor.
   working sessions have an animated indicator and remain selectable. Brackets
   show the enrolled identity nickname. Select any session to open it in its original
   account home. **[new session]** creates another session.
+  The menu opens with a complete list and shares live updates with the home screen.
   Discovery failures are shown explicitly, with retained live rows marked unknown.
 - **Session Manager**, below the session list, opens Codex Switcher. Manage
   accounts, rename sessions, move projects, and handle operation progress,

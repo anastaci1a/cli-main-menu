@@ -90,6 +90,10 @@ tmux() {
   esac
 }
 case $1 in
+  backend_home)
+    PATH="$TEST_BACKEND_BIN:$PATH"
+    ez_select
+    ;;
   backend_live|backend_static)
     [[ $1 != backend_static ]] || EZ_MENU_ANIMATE_STARS=0
     PATH="$TEST_BACKEND_BIN:$PATH"

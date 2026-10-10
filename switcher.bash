@@ -69,11 +69,13 @@ ez_switcher_watch_close() {
 # 0: a new complete snapshot; 1: no change; 2: disconnected/malformed.
 # Timed reads can return a partial JSON line. Preserve it until its newline.
 ez_switcher_watch_read() {
-  local part result status=1 attempt
+  local part result status=1 attempt timeout=${1:-0.01}
   for ((attempt=0;attempt<8;attempt++)); do
-    IFS= read -r -t 0 -u "$watch_fd" || return "$status"
+    if (( attempt > 0 )) || [[ $# == 0 ]]; then
+      IFS= read -r -t 0 -u "$watch_fd" || return "$status"
+    fi
     part=''
-    if IFS= read -r -t 0.01 -u "$watch_fd" part; then result=0; else result=$?; fi
+    if IFS= read -r -t "$timeout" -u "$watch_fd" part; then result=0; else result=$?; fi
     watch_partial+=$part
     if (( result == 0 )); then
       if ! ez_switcher_json=$(jq -cse "if length == 1 then .[0] | $ez_switcher_inventory_filter else empty end" <<< "$watch_partial" 2>/dev/null); then

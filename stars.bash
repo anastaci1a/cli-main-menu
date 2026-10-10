@@ -15,6 +15,45 @@ function ez_stars_now() {
   fi
 }
 
+# Immutable timing tables are shared by successive chooser subshells. Keep one
+# bounded entry, keyed by the only setting that changes these curves.
+function ez_stars_prepare_curves() {
+  local duration=${1:-1467} flash=300 age amount progress distance=0 stars_eased
+  [[ $duration =~ ^[1-9][0-9]{0,4}$ ]] || duration=1467
+  (( duration < 300 )) && duration=300
+  [[ ${ez_stars_curve_duration:-} == "$duration" ]] && return 0
+  (( duration < 600 )) && flash=$((duration/2))
+  local rise=$((flash/5)) tail=$((flash-flash/5)) travel=$((duration-flash))
+  ez_stars_curve_twinkle=() ez_stars_curve_glyph=() ez_stars_curve_replacement=()
+  ez_stars_curve_flash=() ez_stars_curve_arrival=()
+  for ((age=0;age<900;age++)); do
+    if (( age < 120 )); then amount=$((age*1000/120));
+    else amount=$((1000-(age-120)*1000/780)); fi
+    amount=$((amount*amount*(3000-2*amount)/1000000))
+    ez_stars_curve_twinkle[age]=$amount
+    if (( amount < 250 )); then ez_stars_curve_glyph[age]='.';
+    elif (( amount < 650 )); then ez_stars_curve_glyph[age]='+';
+    else ez_stars_curve_glyph[age]='*'; fi
+    if (( age < 500 )); then
+      amount=$((age*2))
+      ez_stars_curve_replacement[age]=$((amount*amount*(3000-2*amount)/1000000))
+    fi
+  done
+  for ((age=0;age<flash;age++)); do
+    if (( age < rise )); then amount=$((age*1000/rise));
+    else amount=$((1000-(age-rise)*1000/tail)); fi
+    ez_stars_curve_flash[age]=$((amount*amount*(3000-2*amount)/1000000))
+  done
+  for ((progress=0;progress<=1000;progress++)); do
+    ez_stars_sweep_ease "$progress"
+    while (( distance <= stars_eased )); do
+      ez_stars_curve_arrival[distance]=$((travel*progress/1000))
+      distance=$((distance+1))
+    done
+  done
+  ez_stars_curve_duration=$duration
+}
+
 function ez_stars_init() {
   stars_repair_active=0
   stars_bar_cycle=-1
@@ -68,27 +107,11 @@ function ez_stars_init() {
   (( stars_duration < 600 )) && flash=$((stars_duration / 2))
   stars_travel=$((stars_duration - flash))
   stars_rise=$((flash / 5)) stars_tail=$((flash - stars_rise))
-  stars_flash=()
-  stars_twinkle_curve=() stars_replacement_curve=() stars_twinkle_glyph=()
-  local age amount
-  for ((age = 0; age < 900; age++)); do
-    if (( age < 120 )); then amount=$((age * 1000 / 120));
-    else amount=$((1000 - (age - 120) * 1000 / 780)); fi
-    amount=$((amount * amount * (3000 - 2 * amount) / 1000000))
-    stars_twinkle_curve[age]=$amount
-    if (( amount < 250 )); then stars_twinkle_glyph[age]='.';
-    elif (( amount < 650 )); then stars_twinkle_glyph[age]='+';
-    else stars_twinkle_glyph[age]='*'; fi
-    if (( age < 500 )); then
-      amount=$((age * 2))
-      stars_replacement_curve[age]=$((amount * amount * (3000 - 2 * amount) / 1000000))
-    fi
-  done
-  for ((age = 0; age < flash; age++)); do
-    if (( age < stars_rise )); then amount=$((age * 1000 / stars_rise));
-    else amount=$((1000 - (age - stars_rise) * 1000 / stars_tail)); fi
-    stars_flash[age]=$((amount * amount * (3000 - 2 * amount) / 1000000))
-  done
+  ez_stars_prepare_curves "$stars_duration"
+  stars_flash=("${ez_stars_curve_flash[@]}")
+  stars_twinkle_curve=("${ez_stars_curve_twinkle[@]}")
+  stars_twinkle_glyph=("${ez_stars_curve_glyph[@]}")
+  stars_replacement_curve=("${ez_stars_curve_replacement[@]}")
   stars_arrival_cell=() stars_settled=() stars_text_settled=() stars_geometry_key=''
   stars_work_ready=0 stars_work_dirty=1 stars_last_elapsed=-1 stars_last_phase=0
   stars_text_dirty=()
@@ -98,16 +121,7 @@ function ez_stars_init() {
   stars_replace_head=0 stars_replace_tail=0
   stars_color_pair=()
   stars_prefetch_cycle=-1 stars_prefetch_cursor=0 stars_prefetch_cells=() stars_prefetch_budget=32
-  # Invert the movement once; no curve solving in the per-cell frame loop.
-  local progress distance=0
-  stars_sweep_arrival=()
-  for ((progress = 0; progress <= 1000; progress++)); do
-    ez_stars_sweep_ease "$progress"
-    while (( distance <= stars_eased )); do
-      stars_sweep_arrival[distance]=$((stars_travel * progress / 1000))
-      distance=$((distance + 1))
-    done
-  done
+  stars_sweep_arrival=("${ez_stars_curve_arrival[@]}")
   stars_hue=() stars_sat=() stars_value=() stars_rgb_cache=()
   for color in "$C_STAR_BLUE" "$C_STAR_LAVENDER" "$C_STAR_PINK"; do
     red=135 green=135 blue=175

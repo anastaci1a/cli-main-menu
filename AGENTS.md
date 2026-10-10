@@ -26,8 +26,10 @@ contains text/path input widgets.
   activity come only from `sessions`; failed/malformed discovery is not empty
   success, and missing activity is unknown. Keep busy rows selectable. Track
   selection by backend ID with exact-thread fallback after a lifecycle change.
-  Seed Sessions from a recent validated home snapshot, then use the watch stream;
-  let `open` resolve the selected ID without another discovery preflight.
+  Home and Sessions exchange their complete validated snapshots through the
+  chooser's opt-in state return and refresh via the watch stream. Never paint a
+  partial Sessions list while awaiting its first snapshot or rescan on Back.
+  Let `open` resolve the selected ID without another discovery preflight.
 - Display `display_account` with `account` fallback; only `account` represents
   home provenance. Use `run --account` for new launches and `open --session ID`
   for live or saved history, attaching the returned exact target. Never substitute a display
@@ -62,6 +64,8 @@ contains text/path input widgets.
   Sparse repairs must use current cell tokens and exact per-cell arrival times.
   When optimizing, compare captured frames against the previous renderer;
   output and random behavior must remain equivalent.
+  Reuse the bounded timing-curve cache across screens; its key is the validated
+  sweep duration. Mutable star state remains local to each chooser.
 
 ## Verification
 
@@ -78,6 +82,9 @@ contains text/path input widgets.
   `BENCH_CAPTURE`; use `tools/benchmark-foreground.bash` for full repairs.
   `perl tools/benchmark-sessions.pl [CHECKOUT]` measures Sessions entry,
   output volume, option paints, and discovery calls with an isolated backend.
+  `perl tools/benchmark-navigation.pl [CHECKOUT]` measures complete menu/form
+  transitions with an isolated slow backend; `BENCH_BACKEND_DELAY`, `BENCH_ROWS`,
+  and `BENCH_COLS` control its workload.
   Exercise changing layouts with `BENCH_SCENARIO=1`, irregular frames with
   `BENCH_JITTER=1`, long runs with `BENCH_WARMUP_MS`, and custom cycles with
   `BENCH_TIME_OFFSET_MS`/`BENCH_HUE_STEP`.

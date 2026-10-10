@@ -72,6 +72,17 @@ ez_menu_refresh_view
 # The saved key remains resolvable if another client opened it before Enter.
 ez_codex_get_current thread:12345678-1234-1234-1234-123456789def
 [[ $(jq -r '.id' <<< "$ez_switcher_row") == pane:%3 ]]
+# The isolated chooser returns its latest complete state on both selection and
+# Back, including empty and multiline errors, without treating JSON as shell code.
+(
+  expected_snapshot=$ez_codex_snapshot
+  ez_codex_snapshot_at=12 ez_switcher_error=''
+  ez_codex_choose 0 '' -- One <<< 1 2>/dev/null
+  [[ $ez_menu_choice == 0 && $ez_codex_snapshot == "$expected_snapshot" && $ez_codex_snapshot_at == 12 && -z $ez_switcher_error ]]
+  ez_codex_snapshot='' ez_codex_snapshot_at=-100 ez_switcher_error=$'Offline\nRetry discovery.'
+  if ez_codex_choose 0 '' -- One </dev/null 2>/dev/null; then exit 1; fi
+  [[ -z $ez_menu_choice && -z $ez_codex_snapshot && $ez_codex_snapshot_at == -100 && $ez_switcher_error == $'Offline\nRetry discovery.' ]]
+)
 # A failed inventory is visible and never turns stale activity into idle/empty.
 printf '{broken' > "$test_root/snapshot"
 ez_menu_refresh_view

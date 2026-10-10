@@ -361,12 +361,15 @@ sub inventory_fixture {
 inventory_fixture('idle','busy');
 $ENV{TEST_DISCOVERY_GATE}="$backend_test/ready";
 start_case('backend_live');
-expect(qr/Loading Sessions/,'controls render before delayed discovery completes');
+pump(0.25);
+die 'partial Sessions menu appears before discovery completes' if plain($buf) =~ /Loading Sessions|\[new session\]|Session Manager/;
 die 'discovery performs a redundant synchronous scan' if read_file($ENV{TEST_BACKEND_CALLS}) =~ /^sessions --all$/m;
+send_keys("\e[B");
 open my $gate, '>', $ENV{TEST_DISCOVERY_GATE} or die $!;
 close $gate;
 expect(qr/Beta/,'first watch snapshot populates the menu');
-send_keys("\e");
+send_keys("\n");
+expect(qr/SELECTED=pane:%1/,'navigation queued during discovery reaches the complete menu');
 finish();
 delete $ENV{TEST_DISCOVERY_GATE};
 start_case('backend_static');
@@ -425,6 +428,42 @@ expect(qr/Discovery Disconnected/,'malformed stream is visible');
 expect(qr/unknown;${gap}disconnected/,'stale activity becomes unknown');
 send_keys("\e");
 finish();
+inventory_fixture('idle','busy');
+open my $home_calls, '>', $ENV{TEST_BACKEND_CALLS} or die $!; close $home_calls;
+start_case('backend_home');
+expect(qr/Codex:${gap}Resume${gap}\(Beta\)/,'home loads its first complete watch snapshot');
+inventory_fixture('busy','idle');
+expect(qr/Codex:${gap}Resume${gap}\(Alpha\)/,'home keeps its cached inventory current');
+send_keys("\e[B\e[B\n");
+expect(qr/Session${gap}Manager/,'home opens complete Sessions inventory');
+die 'partial loading state reappeared' if plain($buf) =~ /Loading Sessions/;
+$buf='';
+inventory_fixture('idle','busy');
+expect(qr/Beta.*Alpha/s,'Sessions consumes changed inventory');
+$buf='';
+send_keys("\e");
+expect(qr/Codex:${gap}Resume${gap}\(Beta\)/,'Back transfers the updated snapshot to home');
+die 'menu navigation performs a synchronous discovery scan' if read_file($ENV{TEST_BACKEND_CALLS}) =~ /^sessions --all$/m;
+open my $home_invalid, '>', $ENV{TEST_INVENTORY} or die $!;
+print {$home_invalid} '{invalid'; close $home_invalid;
+expect(qr/Codex:${gap}Sessions${gap}\(disconnected\)/,'home exposes discovery disconnection with retained rows');
+send_keys("\e");
+finish();
+for my $watcher (split /\n/,read_file($ENV{TEST_WATCH_PIDS})) {
+  die 'watcher survived home exit' if kill 0, $watcher;
+}
+$ENV{TEST_DISCOVERY_GATE}="$backend_test/never-ready";
+for my $cancel ("\e","\x03") {
+  start_case('backend_live');
+  pump(0.2);
+  send_keys($cancel);
+  if ($cancel eq "\x03") { waitpid($pid,0); close $pty; }
+  else { finish(); }
+}
+for my $watcher (split /\n/,read_file($ENV{TEST_WATCH_PIDS})) {
+  die 'watcher survived cancellation during initial discovery' if kill 0, $watcher;
+}
+delete $ENV{TEST_DISCOVERY_GATE};
 delete @ENV{qw(TEST_BACKEND_BIN TEST_INVENTORY TEST_WATCH_PIDS TEST_BACKEND_CALLS)};
 print "PASS live watch refresh, stable selection, disconnected state and cleanup\n";
 my $switcher_test=tempdir(CLEANUP=>1);

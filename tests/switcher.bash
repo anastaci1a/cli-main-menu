@@ -53,4 +53,18 @@ mapfile -d '' -t args < "$test_root/args"
 ez_codex_open "$(jq '.id="pane:%7" | .lifecycle="live" | .activity="busy" | .move_id="pending"' <<< "$row")"
 mapfile -d '' -t args < "$test_root/args"
 [[ ${args[*]} == 'open --session pane:%7' ]]
+# Selecting a row delegates straight to open, without an inventory preflight.
+ez_codex_inventory() { printf 'unexpected scan\n' > "$test_root/rescan"; return 1; }
+ez_menu_choose() {
+  if [[ -e $test_root/chosen ]]; then
+    printf '%s' "$session_selection" > "$test_root/restored"
+    return 130
+  fi
+  touch "$test_root/chosen"
+  printf 'pane:%%7'
+}
+ez_menu_codex_sessions
+[[ ! -e $test_root/rescan && $(< "$test_root/restored") == pane:%7 ]]
+mapfile -d '' -t args < "$test_root/args"
+[[ ${args[*]} == 'open --session pane:%7' ]]
 printf 'PASS dashboard reuse, capacity warnings, original-home backend opening and attachment\n'

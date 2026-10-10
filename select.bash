@@ -4,7 +4,7 @@
 function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index now live_suffix duration_output duration_suffix duration_color duration_col duration_row duration_width
   local menu_back_focused=0 menu_has_back=0 menu_exit_control=0
-  local spinner_now spinner_row spinner_col spinner_color spinner_token
+  local spinner_now spinner_row spinner_col spinner_color spinner_token spinner_output
   local -a spinner_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') spinner_seen=() menu_spacers=()
   local refresh_function='' refresh_at=0 menu_cleanup='' description='' description_output='' description_seen=''
   local -a menu_keys=() menu_threads=() busy_rows=() description_rows=()
@@ -197,8 +197,9 @@ function ez_menu_choose() (
   title_width=${#title_rows[0]}
   (( selected >= count )) && selected=0
   while :; do
-    frame='' status_output='' option_frame=0
-    if [[ -n $refresh_function ]] && (( SECONDS >= refresh_at )); then
+    frame='' status_output='' spinner_output='' option_frame=0 changed_durations=()
+    if [[ -n $refresh_function ]] && { (( SECONDS >= refresh_at )) ||
+        { [[ -n $watch_fd && $watch_failed == 0 ]] && IFS= read -r -t 0 -u "$watch_fd"; }; }; then
       ez_menu_refresh_view
       refresh_at=$((SECONDS+2))
     fi
@@ -210,7 +211,6 @@ function ez_menu_choose() (
       (( SECONDS - last_repair >= 5 )) && full_redraw=1
     fi
     if (( redraw || SECONDS != last_tick )); then
-      changed_durations=()
       responsive_labels=("${original_labels[@]}")
       menu_accent_suffix=() menu_gray_suffix=()
       for index in "${!specified_accent_suffix[@]}"; do
@@ -249,9 +249,13 @@ function ez_menu_choose() (
       fi
       for ((index=0; index<count; index++)); do
         if [[ ${last_labels[index]-} != "${responsive_labels[index]}" ]]; then
-          text_cache_key=''
+          # Clock digits with the same width leave the star mask unchanged.
+          # Inventory changes and navigation already request a foreground frame.
+          label=${last_labels[index]-}
+          if [[ ! ${duration_created[index]+set} ]] || (( ${#label} != ${#responsive_labels[index]} )); then
+            text_cache_key=''
+          fi
           [[ ${duration_created[index]+set} ]] && changed_durations+=("$index")
-          [[ -z $refresh_function ]] || redraw=1
         fi
       done
       last_labels=("${responsive_labels[@]}")
@@ -444,13 +448,12 @@ function ez_menu_choose() (
           printf -v duration_output '%s\033[%d;%dH%s%s%s%s' "$duration_output" "$duration_row" "$duration_col" "$C_RESET" "$duration_color" "$duration_suffix" "$C_RESET"
         done
       fi
-      printf '%s%s%s%s%s%s' "$status_output" "$header_output" "$frame" "$stars_output" "$duration_output" "$description_output" >&2
       ez_stars_now
       stars_delay=$((50 - (stars_now - stars_frame_started)))
       (( stars_delay < 1 )) && stars_delay=1
       printf -v input_timeout '0.%03d' "$stars_delay"
     elif [[ -n $frame ]]; then
-      printf '\033[H%s' "$frame" >&2
+      frame=$'\033[H'"$frame"
     fi
     if (( ${#busy_rows[@]} )); then
       ez_stars_now
@@ -470,12 +473,16 @@ function ez_menu_choose() (
         fi
         spinner_token="$spinner_row:$spinner_col:$spinner_color:${spinner_frames[spinner_now%10]}"
         if [[ ${spinner_seen[index]-} != "$spinner_token" || -n $frame || -n ${duration_output:-} ]] || (( option_frame )); then
-          printf '\033[%d;%dH%s%s%s' "$spinner_row" "$spinner_col" "$C_RESET$spinner_color" "${spinner_frames[spinner_now%10]}" "$C_RESET" >&2
+          printf -v spinner_output '%s\033[%d;%dH%s%s%s' "$spinner_output" "$spinner_row" "$spinner_col" "$C_RESET$spinner_color" "${spinner_frames[spinner_now%10]}" "$C_RESET"
           spinner_seen[index]=$spinner_token
         fi
       done
       (( ez_stars_animated )) || input_timeout=0.1
     fi
+    # Emit timestamp repairs and their spinner overlay together.
+    printf '%s%s%s%s%s%s%s' "$status_output" "$header_output" "$frame" "${stars_output:-}" "${duration_output:-}" "$description_output" "$spinner_output" >&2
+    # An opt-out from animation must not delay the first discovery snapshot.
+    if (( ! ez_stars_animated )) && [[ -n $watch_fd && $watch_failed == 0 ]]; then input_timeout=0.1; fi
     if IFS= read -rsn1 -t "$input_timeout" key; then
       :
     else
@@ -500,8 +507,8 @@ function ez_menu_choose() (
           [[ $next == [a-zA-Z~] || ${#sequence} -ge 16 ]] && break
         done
         case $sequence in
-          *A) direction=-1 ;;
-          *B) direction=1 ;;
+          *A) direction=-1; session_selection='' ;;
+          *B) direction=1; session_selection='' ;;
           *C) if (( menu_back_focused )); then menu_back_focused=0; redraw=1; text_cache_key=''; fi
                continue ;;
           *D) if (( menu_has_back )); then menu_back_focused=1; redraw=1; text_cache_key=''; fi
@@ -527,9 +534,12 @@ function ez_menu_choose() (
 # Hooks replace the arrays in place; a stable view leaves animation/layout intact.
 ez_menu_refresh_view() {
   local key=${menu_keys[selected]-} thread=${menu_threads[selected]-} index found=0
+  # Returning from attach can precede the watcher's first snapshot. Keep the
+  # requested identity until it arrives, unless the user has moved meanwhile.
+  if [[ -n ${session_selection:-} ]]; then key=$session_selection; thread=${session_selection_thread:-}; fi
   local before after
   before=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows menu_spacers description screen_title disabled_indices)
-  "$refresh_function" || :
+  "$refresh_function" || return 0
   after=$(declare -p original_labels menu_keys menu_threads specified_accent_suffix specified_gray_suffix duration_created busy_rows menu_spacers description screen_title disabled_indices)
   count=${#original_labels[@]}
   (( count )) || return 0

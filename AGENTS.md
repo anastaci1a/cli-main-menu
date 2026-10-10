@@ -25,6 +25,8 @@ contains text/path input widgets.
   activity come only from `sessions`; failed/malformed discovery is not empty
   success, and missing activity is unknown. Keep busy rows selectable. Track
   selection by backend ID with exact-thread fallback after a lifecycle change.
+  Seed Sessions from a recent validated home snapshot, then use the watch stream;
+  let `open` resolve the selected ID without another discovery preflight.
 - Display `display_account` with `account` fallback; only `account` represents
   home provenance. Use `run --account` for new launches and `open --session ID`
   for live or saved history, attaching the returned exact target. Never substitute a display
@@ -72,6 +74,8 @@ contains text/path input widgets.
 - For performance work, use `tools/benchmark.bash`,
   `tools/benchmark-summary.cjs`, and `tools/compare-frames.cjs` with
   `BENCH_CAPTURE`; use `tools/benchmark-foreground.bash` for full repairs.
+  `perl tools/benchmark-sessions.pl [CHECKOUT]` measures Sessions entry,
+  output volume, option paints, and discovery calls with an isolated backend.
   Exercise changing layouts with `BENCH_SCENARIO=1`, irregular frames with
   `BENCH_JITTER=1`, long runs with `BENCH_WARMUP_MS`, and custom cycles with
   `BENCH_TIME_OFFSET_MS`/`BENCH_HUE_STEP`.

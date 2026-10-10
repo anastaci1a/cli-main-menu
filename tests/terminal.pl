@@ -334,11 +334,16 @@ my $backend_test=tempdir(CLEANUP=>1);
 $ENV{TEST_BACKEND_BIN}="$backend_test/bin";
 $ENV{TEST_INVENTORY}="$backend_test/inventory";
 $ENV{TEST_WATCH_PIDS}="$backend_test/pids";
+$ENV{TEST_BACKEND_CALLS}="$backend_test/calls";
 mkdir $ENV{TEST_BACKEND_BIN} or die $!;
 open my $backend_script, '>', "$ENV{TEST_BACKEND_BIN}/codex-switcher" or die $!;
 print {$backend_script} <<'SH';
 #!/bin/bash
 [[ $1 == sessions ]] || exit 99
+printf '%s\n' "$*" >> "$TEST_BACKEND_CALLS"
+if [[ -n ${TEST_DISCOVERY_GATE:-} ]]; then
+  while [[ ! -e $TEST_DISCOVERY_GATE ]]; do sleep 0.02; done
+fi
 if [[ $* == *--watch* ]]; then
   printf '%s\n' "$$" >> "$TEST_WATCH_PIDS"
   while :; do cat "$TEST_INVENTORY"; printf '\n'; sleep 0.2; done
@@ -354,6 +359,16 @@ sub inventory_fixture {
   rename "$ENV{TEST_INVENTORY}.next", $ENV{TEST_INVENTORY} or die $!;
 }
 inventory_fixture('idle','busy');
+$ENV{TEST_DISCOVERY_GATE}="$backend_test/ready";
+start_case('backend_live');
+expect(qr/Loading Sessions/,'controls render before delayed discovery completes');
+die 'discovery performs a redundant synchronous scan' if read_file($ENV{TEST_BACKEND_CALLS}) =~ /^sessions --all$/m;
+open my $gate, '>', $ENV{TEST_DISCOVERY_GATE} or die $!;
+close $gate;
+expect(qr/Beta/,'first watch snapshot populates the menu');
+send_keys("\e");
+finish();
+delete $ENV{TEST_DISCOVERY_GATE};
 start_case('backend_static');
 expect(qr/Beta/,'static busy session');
 send_keys("\e[B");
@@ -363,7 +378,8 @@ die 'timestamp does not follow the spinner gap' unless plain($buf) =~ /Beta\s+\[
 my $dim_mark=length $buf;
 send_keys("\e[D");
 die 'Back focus does not dim the spinner with the account' unless substr($buf,$dim_mark) =~ /\e\[5;51H\e\[0m\e\[38;2;129;81;153m$colored_spinner/;
-die 'Back focus leaves spinner bright' if substr($buf,$dim_mark) =~ /\e\[5;51H\e\[0m\e\[38;5;177m$colored_spinner/;
+my @spinner_styles=substr($buf,$dim_mark) =~ /\e\[5;51H\e\[0m\e\[(38;[0-9;]+)m$colored_spinner/g;
+die 'Back focus leaves spinner bright' unless $spinner_styles[-1] eq '38;2;129;81;153';
 send_keys("\e");
 finish();
 start_case('backend_live');
@@ -376,6 +392,12 @@ die 'busy indicator did not animate at subsecond intervals' unless keys(%spinner
 die 'busy indicator repainted the screen' if $spinner_update =~ /\e\[2J|\e\[H/;
 die 'legacy working suffix still present' if plain($buf) =~ /working/;
 send_keys("\e[B");
+my $clock_mark=length $buf;
+pump(1.25);
+my $clock_update=substr($buf,$clock_mark);
+die 'session clock repaints option names' if plain($clock_update) =~ /Beta|new session|Session Manager/;
+my $clock_repairs=()=plain($clock_update) =~ / \([0-9]+:/g;
+die 'session timestamp is repeatedly repaired between ticks' unless $clock_repairs>=1 && $clock_repairs<=2;
 inventory_fixture('busy','idle');
 expect(qr/Beta\*/,'watch updates busy to idle');
 send_keys("\n");
@@ -396,10 +418,10 @@ expect(qr/Beta/,'live inventory before disconnect');
 open my $invalid, '>', $ENV{TEST_INVENTORY} or die $!;
 print {$invalid} '{invalid'; close $invalid;
 expect(qr/Discovery Disconnected/,'malformed stream is visible');
-expect(qr/unknown; disconnected/,'stale activity becomes unknown');
+expect(qr/unknown;${gap}disconnected/,'stale activity becomes unknown');
 send_keys("\e");
 finish();
-delete @ENV{qw(TEST_BACKEND_BIN TEST_INVENTORY TEST_WATCH_PIDS)};
+delete @ENV{qw(TEST_BACKEND_BIN TEST_INVENTORY TEST_WATCH_PIDS TEST_BACKEND_CALLS)};
 print "PASS live watch refresh, stable selection, disconnected state and cleanup\n";
 my $switcher_test=tempdir(CLEANUP=>1);
 $ENV{TEST_SWITCHER_LOG}="$switcher_test/switcher.log";

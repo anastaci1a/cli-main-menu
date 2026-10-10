@@ -28,7 +28,7 @@ response='{"schema_version":1,"daemon":{"running":false},"accounts":[]}'
 if ez_switcher_accounts; then exit 1; fi
 ez_codex_error() { :; }
 ez_codex_attach() { touch "$test_root/attached"; }
-for response in '{}' '{"schema_version":1,"session":{"pane":"bad","tmux_session":"valid"}}' '{"schema_version":1,"session":{"pane":"%1","tmux_session":""}}'; do
+for response in '{}' '{"schema_version":1,"session":{"pane":"bad","tmux_session":"valid"}}' '{"schema_version":1,"session":{"pane":"%1","tmux_session":""}}' '{"schema_version":1,"session":{"pane":"%1","tmux_session":"valid","thread_id":42}}'; do
   if ez_codex_open '{"id":"pane:%7"}'; then exit 1; fi
   [[ ! -f $test_root/attached && -n $ez_switcher_error ]]
 done

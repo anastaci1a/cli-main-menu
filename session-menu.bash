@@ -49,7 +49,8 @@ ez_codex_error() {
 ez_codex_inventory() {
   ez_switcher_inventory || return
   ez_codex_snapshot=$ez_switcher_json
-  ez_codex_rank_inventory
+  ez_codex_rank_inventory || return
+  ez_codex_snapshot_at=$SECONDS
 }
 
 # Switcher owns names and recency; tmux supplies only presentation uptime.
@@ -76,11 +77,8 @@ ez_codex_display_name() {
 }
 
 ez_menu_codex_label() {
-  local row name
-  row=$(jq -c '.sessions[0]' <<< "$ez_codex_snapshot")
-  name=$(ez_codex_display_name "$row")
-  if [[ $(jq -r '.lifecycle' <<< "$row") == live ]]; then printf 'Codex: Resume (%s)' "$name"
-  else printf 'Codex: Start (%s)' "$name"; fi
+  jq -r '.sessions[0] | (if .lifecycle == "live" then "Codex: Resume" else "Codex: Start" end) +
+    " (" + (.name | gsub("[\u0000-\u001f\u007f]"; " ")) + ")"' <<< "$ez_codex_snapshot"
 }
 
 ez_codex_attach() {
@@ -156,7 +154,10 @@ ez_codex_new() {
 }
 
 ez_menu_codex() {
-  ez_codex_inventory || { ez_codex_error; return 1; }
+  # Open the row shown on the home screen; open resolves its current state.
+  if [[ -z ${ez_codex_snapshot:-} ]]; then
+    ez_codex_inventory || { ez_codex_error; return 1; }
+  fi
   local row
   row=$(jq -c '.sessions[0] // empty' <<< "$ez_codex_snapshot")
   [[ -n $row ]] || return 0
@@ -164,13 +165,23 @@ ez_menu_codex() {
 }
 
 ez_codex_open() {
+  ez_codex_open_id "$(jq -r '.id' <<< "$1")"
+}
+
+ez_codex_open_id() {
   # Open resolves live/saved transitions, records recency, and preserves the
   # original account home. The display name is never an operational target.
   ez_switcher_request 'select(.schema_version == 1 and
     (.session.pane | type == "string" and test("^%[0-9]+$")) and
+    (.session.id == null or (.session.id | type == "string" and length > 0)) and
+    (.session.thread_id == null or (.session.thread_id | type == "string")) and
     (.session.tmux_session | type == "string" and length > 0))' \
-    open --session "$(jq -r '.id' <<< "$1")" || { ez_codex_error; return 1; }
-  ez_codex_attach "=$(jq -r '.session.tmux_session' <<< "$ez_switcher_json")" "$(jq -r '.session.pane' <<< "$ez_switcher_json")"
+    open --session "$1" || { ez_codex_error; return 1; }
+  local -a opened
+  mapfile -d '' -t opened < <(jq -jr '.session | [(.id // ("pane:"+.pane)), (.thread_id // ""), .tmux_session, .pane] | .[] | .+"\u0000"' <<< "$ez_switcher_json")
+  ez_codex_opened_id=${opened[0]} ez_codex_opened_thread=${opened[1]}
+  ez_codex_snapshot_at=-100
+  ez_codex_attach "=${opened[2]}" "${opened[3]}"
 }
 
 # Presentation derives only labels, order and uptime. tmux metadata supplements
@@ -182,19 +193,32 @@ ez_codex_sessions_refresh() {
   if [[ -t 0 && -t 2 && ${TERM:-dumb} != dumb ]]; then
     if (( ! watch_started )); then
       watch_started=1 menu_cleanup=ez_switcher_watch_close
-      if ez_codex_inventory; then inventory_ok=1; fi
-      ez_switcher_watch_start || watch_failed=1
+      # Reuse a recent, already validated home-menu snapshot while the stream
+      # starts. Otherwise draw the controls immediately and await its first row.
+      if [[ -n ${ez_codex_snapshot:-} ]] && (( SECONDS - ${ez_codex_snapshot_at:--100} <= 2 )); then
+        inventory_ok=1
+      else ez_codex_snapshot=''; fi
+      if ! ez_switcher_watch_start; then
+        watch_failed=1 ez_switcher_error='Could not start session discovery.'
+      fi
     elif (( ! watch_failed )); then
       if ez_switcher_watch_read; then ez_codex_snapshot=$ez_switcher_json; ez_codex_rank_inventory; inventory_ok=1
       else
         watch_status=$?
-        (( watch_status != 1 )) || return 0
+        (( watch_status != 1 )) || return 1
         watch_failed=1
         if [[ -n $watch_snapshot ]]; then ez_codex_snapshot=$watch_snapshot; ez_codex_rank_inventory; fi
       fi
     fi
   elif ez_codex_inventory; then inventory_ok=1; fi
   if (( ! inventory_ok )); then
+    if (( ${watch_started:-0} && ! ${watch_failed:-0} )) && [[ -z ${ez_codex_snapshot:-} ]]; then
+      description='Loading Sessions…'
+      original_labels=('[new session]' '' 'Session Manager') menu_keys=(new separator manager)
+      menu_threads=('' '' '') menu_spacers=([1]=1) disabled_indices='1'
+      ez_codex_restore_selection waiting
+      return 0
+    fi
     disconnected="Discovery Disconnected: $ez_switcher_error"
     if [[ -n ${ez_codex_snapshot:-} ]]; then
       ez_codex_snapshot=$(jq -c '.sessions |= map(if .lifecycle == "live" then .activity="unknown" else . end)' <<< "$ez_codex_snapshot")
@@ -202,6 +226,7 @@ ez_codex_sessions_refresh() {
       description=$disconnected
       original_labels=('Retry Discovery' '[new session]' '' 'Session Manager') menu_keys=(refresh new separator manager)
       menu_threads=('' '' '' '') menu_spacers=([2]=1) disabled_indices='2'
+      ez_codex_restore_selection
       return 0
     fi
   fi
@@ -235,13 +260,22 @@ ez_codex_sessions_refresh() {
   index=${#original_labels[@]}
   menu_spacers[index]=1 disabled_indices="$index"
   original_labels+=('' 'Session Manager') menu_keys+=(separator manager) menu_threads+=('' '')
+  ez_codex_restore_selection
+}
+
+ez_codex_restore_selection() {
+  local index
   if [[ -n ${session_selection:-} ]]; then
-    selected=0
     for index in "${!menu_keys[@]}"; do
-      if [[ ${menu_keys[index]} == "$session_selection" || ( -n ${session_selection_thread:-} && ${menu_threads[index]} == "$session_selection_thread" ) ]]; then selected=$index; break; fi
+      if [[ ${menu_keys[index]} == "$session_selection" || ( -n ${session_selection_thread:-} && ${menu_threads[index]} == "$session_selection_thread" ) ]]; then
+        selected=$index session_selection=''
+        return 0
+      fi
     done
-    session_selection=''
+    # The first streamed snapshot may still contain the requested conversation.
+    [[ ${1-} == waiting ]] || { selected=0; session_selection=''; }
   fi
+  return 0
 }
 
 ez_menu_codex_sessions() {
@@ -249,13 +283,14 @@ ez_menu_codex_sessions() {
   while :; do
     choice=$(ez_menu_choose 0 '' --screen-title 'Codex: Sessions' --refresh ez_codex_sessions_refresh -- 'Retry Discovery') || return 0
     case $choice in
-      new) ez_codex_new ;;
+      new) session_selection=new session_selection_thread=''; ez_codex_new; ez_codex_snapshot_at=-100 ;;
       refresh) continue ;;
-      manager) session_selection=manager session_selection_thread=''; ez_menu_codex_monitor ;;
+      manager) session_selection=manager session_selection_thread=''; ez_menu_codex_monitor; ez_codex_snapshot_at=-100 ;;
       *)
-        ez_codex_get_current "$choice" || continue
-        session_selection=$choice session_selection_thread=$(jq -r '.thread_id // ""' <<< "$ez_switcher_row")
-        ez_codex_open "$ez_switcher_row"
+        session_selection=$choice session_selection_thread=''
+        if ez_codex_open_id "$choice"; then
+          session_selection=$ez_codex_opened_id session_selection_thread=$ez_codex_opened_thread
+        fi
         ;;
     esac
   done

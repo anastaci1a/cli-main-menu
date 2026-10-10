@@ -8,10 +8,14 @@ if [[ $1 == menu || $1 == switcher_menu || $1 == switcher_ready || $1 == switche
   codex-switcher() {
     case $1 in
       sessions)
-        if [[ -n ${TEST_SESSION_FILE:-} && -s $TEST_SESSION_FILE ]]; then
-          IFS= read -r fixture_name < "$TEST_SESSION_FILE"
-          jq -n --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:($name | sub("^codex-";"")),tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
-        else printf '{"schema_version":1,"observed_at":100,"sessions":[]}\n'; fi ;;
+        while :; do
+          if [[ -n ${TEST_SESSION_FILE:-} && -s $TEST_SESSION_FILE ]]; then
+            IFS= read -r fixture_name < "$TEST_SESSION_FILE"
+            jq -cn --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:($name | sub("^codex-";"")),tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
+          else printf '{"schema_version":1,"observed_at":100,"sessions":[]}\n'; fi
+          [[ $* == *--watch* ]] || break
+          sleep 0.2
+        done ;;
       status) printf '{"schema_version":1,"daemon":{"running":true},"accounts":[{"name":"personal","eligible":true}]}' ;;
       open)
         IFS= read -r fixture_name < "$TEST_SESSION_FILE"
@@ -23,6 +27,14 @@ if [[ $1 == menu || $1 == switcher_menu || $1 == switcher_ready || $1 == switche
       *) printf 'UNEXPECTED_SWITCHER_COMMAND:%s\n' "$1" >> "$TEST_SWITCHER_LOG"; return 99 ;;
     esac
   }
+  # The production watcher execs a command, so provide a real fixture executable
+  # as well as the function used by foreground requests.
+  export -f codex-switcher
+  fixture_bin=$(mktemp -d)
+  trap 'rm -rf -- "$fixture_bin"' EXIT
+  printf '#!/bin/bash\ncodex-switcher "$@"\n' > "$fixture_bin/codex-switcher"
+  chmod +x "$fixture_bin/codex-switcher"
+  PATH="$fixture_bin:$PATH"
 fi
 # Keep visual expectations independent of personal configuration.
 EZ_MENU_TITLE=SATELLITE

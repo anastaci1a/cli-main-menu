@@ -346,19 +346,18 @@ function ez_stars_text_layout() {
     done
   done
   for ((index = first; index < first + visible; index++)); do
-    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     row=$((banner_count + 3 + index - first))
     (( row >= LINES )) && break
-    style=0 fade=100
-    if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
-    elif (( index == selected && ! ${menu_back_focused:-0} )); then style=1; fi
+    style=0 fade=100 text='○'
+    if [[ ${menu_spacers[index]:-0} == 1 ]]; then text='•'
+    elif [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60
+    elif (( index == selected && ! ${menu_back_focused:-0} )); then style=1 text='●'; fi
     (( ${menu_back_focused:-0} )) && fade=60
     # Store each UTF-8 marker as one terminal cell, even in the C locale.
-    text='○'
-    (( index == selected && ! ${menu_back_focused:-0} )) && text='●'
     cell=$(( (row - 1) * COLUMNS + option_left ))
     stars_text_char[$cell]=$text stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade
     stars_text_palette[$cell]=3
+    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     label=${labels[index]-} note=${menu_disabled_notes[index]-}
     if [[ ${menu_enabled[index]:-1} == 0 && -n $note ]] && (( ${#label} + 1 + ${#note} <= label_width )); then
       label+=" $note"
@@ -479,10 +478,10 @@ function ez_stars_build_work() {
 function ez_stars_select() {
   local first=$1 selected=$2 banner_count=$3 index cell style fade char
   for ((index = first; index < first + visible; index++)); do
-    [[ ${menu_spacers[index]:-0} == 1 ]] && continue
     cell=$(((banner_count + 2 + index - first) * COLUMNS + option_left))
     style=0 fade=100 char='○'
-    if [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
+    if [[ ${menu_spacers[index]:-0} == 1 ]]; then char='•'
+    elif [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
     elif (( index == selected )); then style=1 char='●'; fi
     if [[ ${stars_text_char[$cell]-} != "$char" || ${stars_text_style[$cell]-} != "$style" || ${stars_text_fade[$cell]-} != "$fade" ]]; then
       stars_text_char[$cell]=$char stars_text_style[$cell]=$style stars_text_fade[$cell]=$fade

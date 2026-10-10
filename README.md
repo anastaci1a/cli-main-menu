@@ -38,10 +38,10 @@ shell. Text fields use Left/Right to move the cursor.
   directory, lets you browse or type a path, and can create a new directory.
   Session names may contain letters, digits, spaces, and `_+-=~()[]`.
 - **Codex: Sessions** lists live sessions, idle sessions
-  marked `*`, and saved conversations marked `(inactive)`, newest first within
-  each group when recency is available. The list updates live; working sessions
-  have an animated indicator and remain selectable. Brackets show the enrolled
-  identity nickname. Select any session to open it directly in its original
+  marked `*`, and saved conversations marked `(inactive)`, most recently opened
+  first within each group when switcher has that timestamp. The list updates live;
+  working sessions have an animated indicator and remain selectable. Brackets
+  show the enrolled identity nickname. Select any session to open it in its original
   account home. **[new session]** creates another session.
   Discovery failures are shown explicitly, with retained live rows marked unknown.
 - **Session Manager**, below the session list, opens Codex Switcher. Manage
@@ -53,6 +53,7 @@ Detach from a Codex or dashboard tmux session with Ctrl+B, then D. The menu
 returns; the Sessions list keeps the same session selected. If Codex fails
 during startup, its pane keeps the error visible until you terminate it.
 Session names, recency, and conversation history are managed by switcher.
+The menus hide one leading `codex-` from names without renaming sessions.
 
 ## Customize
 

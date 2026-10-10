@@ -11,7 +11,7 @@ if [[ $1 == menu || $1 == switcher_menu || $1 == switcher_ready || $1 == switche
         while :; do
           if [[ -n ${TEST_SESSION_FILE:-} && -s $TEST_SESSION_FILE ]]; then
             IFS= read -r fixture_name < "$TEST_SESSION_FILE"
-            jq -cn --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:($name | sub("^codex-";"")),tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
+            jq -cn --arg name "$fixture_name" '{schema_version:1,observed_at:100,sessions:[{id:"pane:%0",pane:"%0",thread_id:"12345678-1234-1234-1234-123456789abc",name:$name,tmux_session:$name,cwd:"/root",account:"personal",display_account:"personal",lifecycle:"live",activity:"busy",detail:"Codex is working."}]}'
           else printf '{"schema_version":1,"observed_at":100,"sessions":[]}\n'; fi
           [[ $* == *--watch* ]] || break
           sleep 0.2

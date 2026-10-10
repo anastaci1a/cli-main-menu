@@ -371,6 +371,7 @@ finish();
 delete $ENV{TEST_DISCOVERY_GATE};
 start_case('backend_static');
 expect(qr/Beta/,'static busy session');
+expect(qr/\e\[38;5;177m•\e\[0m/,'static separator uses the option circle color');
 send_keys("\e[B");
 my $colored_spinner=qr/(?:⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)/;
 expect(qr/\e\[5;51H\e\[0m\e\[38;5;177m$colored_spinner/,'selected spinner follows account and uses its bright color');
@@ -408,6 +409,7 @@ for my $watcher (split /\n/,read_file($ENV{TEST_WATCH_PIDS})) {
 }
 start_case('backend_live');
 expect(qr/Session${gap}Manager/,'separated manager row');
+expect(qr/•/,'animated separator has a bullet in the marker column');
 # Up wraps from new-session to manager, skipping the separator in both directions.
 send_keys("\e[A\e[A\e[B\n");
 expect(qr/SELECTED=manager/,'separator cannot take keyboard focus');
@@ -518,11 +520,13 @@ expect(qr/CREATED:<new-session><-d><-P><-F><#\{session_id\}><-s><codex-Alpha><-c
 expect(qr/<satellite-codex><codex-switcher><run><--account><personal><--><--dangerously-bypass-approvals-and-sandbox>/,'managed launch arguments');
 expect(qr/ATTACHED_CODEX/,'new session attaches');
 expect(qr/Codex:${gap}Resume/,'resume label after detach');
+die 'home resume label retains the tmux prefix' unless plain($buf) =~ /Codex: Resume \(Alpha\)/;
 expect(qr/Codex:${gap}Sessions/,'sessions menu after creation');
 my $sessions_marker=length $buf;
 send_keys("\e[B\n");
 expect(qr/\[new${gap}session\]/,'session picker opens');
 my $sessions_screen=plain(substr($buf,$sessions_marker));
+die 'sessions label retains the tmux prefix' if $sessions_screen =~ /codex-Alpha/;
 die 'new session not first in picker' unless $sessions_screen =~ /\[new session\].*Alpha/s;
 die 'session identity nickname missing from picker' unless $sessions_screen =~ /Alpha[ *+.]\[personal\]/;
 die 'animated bold session title bar missing' unless $buf =~ /\e\[48;2;\d+;\d+;\d+m\e\[38;5;255m\e\[1m Codex: Sessions/;

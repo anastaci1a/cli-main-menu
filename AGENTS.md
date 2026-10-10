@@ -20,7 +20,8 @@ contains text/path input widgets.
   and indivisible notes; responsive hints; and numbered non-TTY selection.
 - Run actions in the calling shell so `fg` sees its jobs. Isolate only the
   selector. Skip disabled choices in both directions and reject them in the
-  numeric fallback. Blank separator rows have no marker and cannot take focus.
+  numeric fallback. Separator rows use a non-selectable `•` in the marker column,
+  sharing the option circles' color and animation.
 - Use switcher's `docs/CLI_MAIN_MENU_INTEGRATION.md` contract. Inventory and
   activity come only from `sessions`; failed/malformed discovery is not empty
   success, and missing activity is unknown. Keep busy rows selectable. Track
@@ -34,9 +35,10 @@ contains text/path input widgets.
   No implicit account fallback or `resume --last`. Automatic switching stays off.
 - Selecting a session opens it directly. Session Manager launches switcher `ui`;
   do not duplicate its session actions, durable jobs, or confirmation screens.
-  Use switcher's persistent `name` and `last_accessed` (milliseconds) for labels
-  and recency, preserving busy/unknown, idle, inactive grouping. UI exit stops
-  only its owned inventory watcher, never a durable worker or Codex process.
+  Use switcher's persistent `name`, hiding one leading `codex-` in display labels
+  only, and `last_accessed` (milliseconds) for recency within busy/unknown, idle,
+  inactive groups. UI exit stops only its owned inventory watcher, never a durable
+  worker or Codex process.
 - Do not read credentials, databases, or rollouts; copy histories; stop/steer
   Codex; or move project files here. tmux is only for creation, attachment, and
   presentation timestamps. Preserve text/path input behavior and `cxr`.

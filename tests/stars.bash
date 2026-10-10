@@ -855,8 +855,15 @@ printf 'PASS bounded adaptive color preparation, including a nearly expired idle
   # Reserving the Exit/Back control must not shift the title's text mask.
   [[ ${stars_text_char[$((4*80+37))]} == T ]]
   separator_cell=$((9*80+option_left))
-  [[ ! ${stars_text_char[$separator_cell]+set} && ! ${stars_baseline_blocked[separator_cell+1]+set} ]]
+  [[ ${stars_text_char[$separator_cell]} == '•' && ! ${stars_baseline_blocked[separator_cell+1]+set} ]]
+  [[ ${stars_text_style[$separator_cell]} == 0 && ${stars_text_fade[$separator_cell]} == 100 && ${stars_text_palette[$separator_cell]} == 3 ]]
+  ez_stars_tick 0
+  option_cell=$((separator_cell-80))
+  [[ ${stars_text_seen[$separator_cell]%:*:*} == "${stars_text_seen[$option_cell]%:*:*}" ]]
   ez_stars_select 0 2 6
-  [[ ! ${stars_text_char[$separator_cell]+set} ]]
+  [[ ${stars_text_char[$separator_cell]} == '•' && ${stars_text_style[$separator_cell]} == 0 && ${stars_text_fade[$separator_cell]} == 100 ]]
+  menu_back_focused=1
+  ez_stars_text_layout 6 5 2 0 0 2 "${original_labels[@]}"
+  [[ ${stars_text_char[$separator_cell]} == '•' && ${stars_text_style[$separator_cell]} == 0 && ${stars_text_fade[$separator_cell]} == 60 ]]
 )
-printf 'PASS home arrow preserves title centering and separators stay free of markers\n'
+printf 'PASS home arrow preserves title centering and separator bullets share the marker palette\n'

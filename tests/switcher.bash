@@ -37,7 +37,7 @@ mapfile -d '' -t options < "$test_root/choices"
 ez_codex_attach() { printf '%s\0' "$@" > "$test_root/attach"; }
 ez_codex_valid_name() { return 0; }
 thread=12345678-1234-1234-1234-123456789abc
-row=$(jq -nc --arg thread "$thread" '{id:("thread:"+$thread),thread_id:$thread,name:"project",cwd:"/tmp/path with spaces;$(literal)",account:"work",display_account:"personal",lifecycle:"inactive"}')
+row=$(jq -nc --arg thread "$thread" '{id:("thread:"+$thread),thread_id:$thread,name:"codex-project",cwd:"/tmp/path with spaces;$(literal)",account:"work",display_account:"personal",lifecycle:"inactive"}')
 ez_codex_open "$row"
 mapfile -d '' -t args < "$test_root/args"
 [[ ${args[*]} == "open --session thread:$thread" ]]

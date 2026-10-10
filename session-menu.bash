@@ -53,7 +53,8 @@ ez_codex_inventory() {
   ez_codex_snapshot_at=$SECONDS
 }
 
-# Switcher owns names and recency; tmux supplies only presentation uptime.
+# Switcher's last_accessed is the last open/attach time, in milliseconds.
+# Preserve that precision within activity groups; tmux supplies only uptime.
 ez_codex_rank_inventory() {
   local pane created metadata=''
   while IFS='|' read -r pane created; do
@@ -73,12 +74,12 @@ ez_menu_has_codex() {
 }
 
 ez_codex_display_name() {
-  jq -r '.name | gsub("[\u0000-\u001f\u007f]"; " ")' <<< "$1"
+  jq -r '.name | sub("^codex-"; "") | gsub("[\u0000-\u001f\u007f]"; " ")' <<< "$1"
 }
 
 ez_menu_codex_label() {
   jq -r '.sessions[0] | (if .lifecycle == "live" then "Codex: Resume" else "Codex: Start" end) +
-    " (" + (.name | gsub("[\u0000-\u001f\u007f]"; " ")) + ")"' <<< "$ez_codex_snapshot"
+    " (" + (.name | sub("^codex-"; "") | gsub("[\u0000-\u001f\u007f]"; " ")) + ")"' <<< "$ez_codex_snapshot"
 }
 
 ez_codex_attach() {
@@ -231,7 +232,7 @@ ez_codex_sessions_refresh() {
     fi
   fi
   description=$disconnected
-  mapfile -d '' -t fields < <(jq -jr '.sessions[] | [.id, (.thread_id // ""), (.name | gsub("[\u0000-\u001f\u007f]"; " ")), ((.display_account // .account) | gsub("[\u0000-\u001f\u007f]"; " ")), .activity, .lifecycle, (.menu_created // "" | tostring)] | .[] | . + "\u0000"' <<< "$ez_codex_snapshot")
+  mapfile -d '' -t fields < <(jq -jr '.sessions[] | [.id, (.thread_id // ""), (.name | sub("^codex-"; "") | gsub("[\u0000-\u001f\u007f]"; " ")), ((.display_account // .account) | gsub("[\u0000-\u001f\u007f]"; " ")), .activity, .lifecycle, (.menu_created // "" | tostring)] | .[] | . + "\u0000"' <<< "$ez_codex_snapshot")
   original_labels=('[new session]') menu_keys=(new) menu_threads=('')
   specified_accent_suffix=() specified_gray_suffix=() duration_created=() busy_rows=() menu_spacers=() disabled_indices=''
   for ((offset=0;offset<${#fields[@]};offset+=7)); do

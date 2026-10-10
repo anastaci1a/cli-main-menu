@@ -24,7 +24,8 @@ contains text/path input widgets.
   always using the dim account-label brightness with the same hue animation.
 - Use switcher's `docs/CLI_MAIN_MENU_INTEGRATION.md` contract. Inventory and
   activity come only from `sessions`; failed/malformed discovery is not empty
-  success, and missing activity is unknown. Keep busy rows selectable. Track
+  success, and missing activity is unknown. Keep busy rows selectable and their
+  indicators bold, with full accent brightness except while Back is focused. Track
   selection by backend ID with exact-thread fallback after a lifecycle change.
   Home and Sessions exchange their complete validated snapshots through the
   chooser's opt-in state return and refresh via the watch stream. Never paint a

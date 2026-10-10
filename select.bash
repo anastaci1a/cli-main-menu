@@ -4,7 +4,7 @@
 function ez_menu_choose() (
   local selected=$1 banner=$2 key sequence next label index now live_suffix duration_output duration_suffix duration_color duration_col duration_row duration_width
   local menu_back_focused=0 menu_has_back=0 menu_exit_control=0 menu_pending_input=''
-  local spinner_now spinner_row spinner_col spinner_color spinner_token spinner_output
+  local spinner_now spinner_row spinner_col spinner_color spinner_fade spinner_token spinner_output
   local -a spinner_frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏') spinner_seen=() menu_spacers=()
   local refresh_function='' refresh_at=0 menu_cleanup='' menu_state_output='' description='' description_output='' description_seen=''
   local -a menu_keys=() menu_threads=() busy_rows=() description_rows=()
@@ -469,17 +469,19 @@ function ez_menu_choose() (
         spinner_row=$(( ${#fitted_rows[@]} + 3 + index - first ))
         spinner_col=$((option_left + 4 + ${#original_labels[index]}))
         (( spinner_col < COLUMNS )) || continue
-        spinner_color=$C_DISABLED_NUMBER
-        (( index != selected || menu_back_focused )) || spinner_color=$C_PINK
+        spinner_color=$C_PINK spinner_fade=100
+        if (( menu_back_focused )); then spinner_color=$C_DISABLED_NUMBER spinner_fade=60; fi
         if (( ez_stars_animated )); then
-          # Match the account's closing bracket, including its current shimmer
-          # and selection fade, without adding a second animation engine.
-          spinner_token=${stars_cell_render[$(((spinner_row-1)*COLUMNS+spinner_col-3))]-}
-          [[ -z $spinner_token ]] || printf -v spinner_color '\033[38;2;%sm' "${spinner_token%%:*}"
+          # Keep the account bracket's hue and shimmer timing, independently of
+          # its selection fade. Only Back focus dims the activity indicator.
+          ez_stars_sweep "$spinner_row" "$((spinner_col-3))" "$stars_render_cycle" "$stars_last_phase" \
+            "${stars_arrival_cell[$(((spinner_row-1)*COLUMNS+spinner_col-3))]-}"
+          ez_stars_color 3 "$stars_color_cycle" "$stars_white" "$spinner_fade" 1000
+          printf -v spinner_color '\033[38;2;%d;%d;%dm' "$stars_r" "$stars_g" "$stars_b"
         fi
         spinner_token="$spinner_row:$spinner_col:$spinner_color:${spinner_frames[spinner_now%10]}"
         if [[ ${spinner_seen[index]-} != "$spinner_token" || -n $frame || -n ${duration_output:-} ]] || (( option_frame )); then
-          printf -v spinner_output '%s\033[%d;%dH%s%s%s' "$spinner_output" "$spinner_row" "$spinner_col" "$C_RESET$spinner_color" "${spinner_frames[spinner_now%10]}" "$C_RESET"
+          printf -v spinner_output '%s\033[%d;%dH%s%s%s' "$spinner_output" "$spinner_row" "$spinner_col" "$C_RESET$spinner_color$C_BOLD" "${spinner_frames[spinner_now%10]}" "$C_RESET"
           spinner_seen[index]=$spinner_token
         fi
       done

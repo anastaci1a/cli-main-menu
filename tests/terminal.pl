@@ -376,7 +376,7 @@ start_case('backend_static');
 expect(qr/Beta/,'static busy session');
 expect(qr/\e\[38;2;129;81;153m•\e\[0m/,'static separator uses the dim account color');
 send_keys("\e[B");
-my $colored_spinner=qr/(?:⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)/;
+my $colored_spinner=qr/\e\[1m(?:⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏)/;
 expect(qr/\e\[5;51H\e\[0m\e\[38;5;177m$colored_spinner/,'selected spinner follows account and uses its bright color');
 die 'timestamp does not follow the spinner gap' unless plain($buf) =~ /Beta\s+\[work\]   \(/;
 my $dim_mark=length $buf;
@@ -387,6 +387,39 @@ die 'Back focus leaves spinner bright' unless $spinner_styles[-1] eq '38;2;129;8
 die 'static separator brightened during navigation' if $buf =~ /\e\[38;5;177m•/;
 send_keys("\e");
 finish();
+inventory_fixture('busy','busy');
+for my $mode ('backend_static','backend_live') {
+  start_case($mode);
+  expect(qr/\e\[6;51H\e\[0m\e\[38;[0-9;]+m$colored_spinner/,'both busy indicators render');
+  my $styles=sub {
+    my @colors;
+    for my $row (5,6) {
+      my @seen=$buf =~ /\e\[$row;51H\e\[0m\e\[(38;[0-9;]+)m$colored_spinner/g;
+      die 'missing busy indicator color' unless @seen;
+      push @colors,$seen[-1];
+    }
+    return @colors;
+  };
+  my @initial=$styles->();
+  $buf=''; send_keys("\e[B");
+  my @selected=$styles->();
+  die 'busy indicators dim when their row is not selected' unless
+    $initial[0] eq $initial[1] && $selected[0] eq $initial[0] && $selected[1] eq $initial[0];
+  my $dim='38;2;129;81;153';
+  if ($mode eq 'backend_live') {
+    my ($red,$green,$blue)=$initial[0] =~ /^38;2;(\d+);(\d+);(\d+)$/;
+    die 'animated indicator lost its hue color' unless defined $blue;
+    $dim=join(';','38;2',map { int($_*0.6) } ($red,$green,$blue));
+  } else { die 'static busy indicators are not bright' unless $initial[0] eq '38;5;177'; }
+  $buf=''; send_keys("\e[D");
+  die 'Back does not dim every busy indicator' if grep { $_ ne $dim } $styles->();
+  $buf=''; send_keys("\e[C");
+  die 'leaving Back does not brighten every busy indicator' if grep { $_ ne $initial[0] } $styles->();
+  send_keys("\e");
+  finish();
+}
+inventory_fixture('idle','busy');
+print "PASS busy indicators stay bold and bright except for dimming on Back focus\n";
 start_case('backend_live');
 expect(qr/Beta/,'live inventory opens');
 my $spinner_mark=length $buf;
@@ -560,8 +593,7 @@ send_keys("\n");
 expect(qr/CREATED:<new-session><-d><-P><-F><#\{session_id\}><-s><codex-Alpha><-c><\/root><-e><PATH=/,'launch directory and environment');
 expect(qr/<satellite-codex><codex-switcher><run><--account><personal><--><--dangerously-bypass-approvals-and-sandbox>/,'managed launch arguments');
 expect(qr/ATTACHED_CODEX/,'new session attaches');
-expect(qr/Codex:${gap}Resume/,'resume label after detach');
-die 'home resume label retains the tmux prefix' unless plain($buf) =~ /Codex: Resume \(Alpha\)/;
+expect(qr/Codex:${gap}Resume${gap}\(Alpha\)/,'resume label hides the tmux prefix after detach');
 expect(qr/Codex:${gap}Sessions/,'sessions menu after creation');
 my $sessions_marker=length $buf;
 send_keys("\e[B\n");

@@ -78,3 +78,27 @@ for ((attempt=0;attempt<100;attempt++)); do
 done
 ! tmux has-session -t "$created_id" 2>/dev/null
 printf 'PASS successful Codex exit closes normally\n'
+
+# Exercise the real attachment preparation, including tmux's distinct target
+# parsers. Only the final interactive hop is stubbed to avoid attaching this test.
+source "$cli_dir/session-menu.bash"
+tmux() {
+  case $1 in
+    attach-session|switch-client) printf '%s\n' "$@" > "$test_root/attachment" ;;
+    *) "$tmux_binary" -S "$socket" -f /dev/null "$@" ;;
+  esac
+}
+named_id=$(tmux new-session -d -P -F '#{session_id}' -s 'codex-project with spaces' /bin/sleep 120)
+pane=$(tmux new-window -d -P -F '#{pane_id}' -t "$named_id:" /bin/sleep 120)
+for target in '=codex-project with spaces' "$named_id"; do
+  for mode in attach-session switch-client; do
+    TMUX=''
+    [[ $mode != switch-client ]] || TMUX="$socket,1,0"
+    ez_codex_attach "$target" "$pane"
+    mapfile -t attachment < "$test_root/attachment"
+    [[ ${attachment[0]} == "$mode" && ${attachment[1]} == -t && ${attachment[2]} == "$target" ]]
+    [[ $(tmux show-options -v -t "$named_id:" @ez_codex_last_used) =~ ^[0-9]+$ ]]
+    [[ $(tmux display-message -p -t "$named_id:" '#{pane_id}') == "$pane" ]]
+  done
+done
+printf 'PASS real tmux attachment preparation for exact names, spaces, IDs and selected panes\n'

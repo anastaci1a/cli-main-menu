@@ -116,7 +116,9 @@ ez_codex_attach() {
   local target=$1 pane=${2-} result now
   tmux has-session -t "$target" 2>/dev/null || { ez_codex_error 'Session is no longer available.'; return 1; }
   printf -v now '%(%s)T' -1
-  tmux set-option -t "$target" @ez_codex_last_used "$now" || return
+  # set-option parses a window target, unlike has-session/attach-session.
+  # The colon makes an exact session-name target resolve in that parser too.
+  tmux set-option -t "$target:" @ez_codex_last_used "$now" || return
   if [[ -n $pane ]]; then
     tmux select-window -t "$pane" && tmux select-pane -t "$pane" || return
   fi

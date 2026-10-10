@@ -17,12 +17,12 @@ original_labels=(Refresh) menu_keys=() menu_threads=() duration_created=() durat
 specified_accent_suffix=() specified_gray_suffix=() busy_rows=() disabled_indices='' selected=0 description='' screen_title='Sessions'
 ez_codex_sessions_refresh
 [[ ${menu_keys[*]} == 'new pane:%2 pane:%1 thread:12345678-1234-1234-1234-123456789def separator manager' ]]
-[[ ${original_labels[1]} == 'Beta   [personal]' && ${original_labels[2]} == 'Alpha*     [work]' && ${original_labels[3]} == 'Saved      [work]' ]]
+[[ ${original_labels[1]} == 'Beta  [personal]' && ${original_labels[2]} == 'Alpha     [work]' && ${original_labels[3]} == 'Saved     [work]' ]]
 [[ ${busy_rows[*]} == 1 && $disabled_indices == 4 && ${menu_spacers[4]} == 1 && ${original_labels[4]} == '' ]]
 [[ ${specified_gray_suffix[3]} == ' (inactive)' && ${duration_created[1]} == 200 ]]
 # The separator is visibly marked, but its numeric position cannot be selected.
 choice=$(printf '5\n6\n' | ez_menu_choose 0 '' --screen-title Sessions --refresh ez_codex_sessions_refresh -- Refresh 2> "$test_root/menu")
-[[ $choice == manager && $(<"$test_root/menu") == *'•'* && $(<"$test_root/menu") == *'Choose an available option'* ]]
+[[ $choice == manager && $(<"$test_root/menu") == *"$C_DISABLED_NUMBER•$C_RESET"* && $(<"$test_root/menu") == *'Choose an available option'* ]]
 # Backend names remain authoritative despite old aliases, but the conventional
 # prefix is hidden in labels only. Backend millisecond recency wins.
 mkdir -p "$XDG_STATE_HOME/satellite-cli"

@@ -37,8 +37,8 @@ shell. Text fields use Left/Right to move the cursor.
   name, starting directory, and account. The directory picker starts at your current
   directory, lets you browse or type a path, and can create a new directory.
   Session names may contain letters, digits, spaces, and `_+-=~()[]`.
-- **Codex: Sessions** lists live sessions, idle sessions
-  marked `*`, and saved conversations marked `(inactive)`, most recently opened
+- **Codex: Sessions** lists working sessions, idle sessions,
+  and saved conversations marked `(inactive)`, most recently opened
   first within each group when switcher has that timestamp. The list updates live;
   working sessions have an animated indicator and remain selectable. Brackets
   show the enrolled identity nickname. Select any session to open it in its original

@@ -238,7 +238,6 @@ ez_codex_sessions_refresh() {
   for ((offset=0;offset<${#fields[@]};offset+=7)); do
     key=${fields[offset]} thread=${fields[offset+1]} name=${fields[offset+2]} account=${fields[offset+3]}
     activity=${fields[offset+4]} lifecycle=${fields[offset+5]} created=${fields[offset+6]}
-    [[ $activity != idle ]] || name+='*'
     names+=("$name") accounts+=("$account") activities+=("$activity") lifecycles+=("$lifecycle") createds+=("$created")
     menu_keys+=("$key") menu_threads+=("$thread")
     (( ${#name} <= width )) || width=${#name}

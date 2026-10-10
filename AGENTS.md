@@ -21,7 +21,7 @@ contains text/path input widgets.
 - Run actions in the calling shell so `fg` sees its jobs. Isolate only the
   selector. Skip disabled choices in both directions and reject them in the
   numeric fallback. Separator rows use a non-selectable `•` in the marker column,
-  sharing the option circles' color and animation.
+  always using the dim account-label brightness with the same hue animation.
 - Use switcher's `docs/CLI_MAIN_MENU_INTEGRATION.md` contract. Inventory and
   activity come only from `sessions`; failed/malformed discovery is not empty
   success, and missing activity is unknown. Keep busy rows selectable. Track

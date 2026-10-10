@@ -138,7 +138,7 @@ function ez_menu_choose() (
     index=0
     for label in "$@"; do
       if [[ ${menu_spacers[index]:-0} == 1 ]]; then
-        printf '  %s•%s\n' "$C_PINK" "$C_RESET" >&2
+        printf '  %s•%s\n' "$C_DISABLED_NUMBER" "$C_RESET" >&2
         index=$((index+1)); continue
       fi
       label_color=$C_WHITE number_color=$C_PINK weight='' note_text=''

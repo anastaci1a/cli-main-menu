@@ -349,7 +349,7 @@ function ez_stars_text_layout() {
     row=$((banner_count + 3 + index - first))
     (( row >= LINES )) && break
     style=0 fade=100 text='○'
-    if [[ ${menu_spacers[index]:-0} == 1 ]]; then text='•'
+    if [[ ${menu_spacers[index]:-0} == 1 ]]; then text='•' fade=60
     elif [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60
     elif (( index == selected && ! ${menu_back_focused:-0} )); then style=1 text='●'; fi
     (( ${menu_back_focused:-0} )) && fade=60
@@ -480,7 +480,7 @@ function ez_stars_select() {
   for ((index = first; index < first + visible; index++)); do
     cell=$(((banner_count + 2 + index - first) * COLUMNS + option_left))
     style=0 fade=100 char='○'
-    if [[ ${menu_spacers[index]:-0} == 1 ]]; then char='•'
+    if [[ ${menu_spacers[index]:-0} == 1 ]]; then char='•' fade=60
     elif [[ ${menu_enabled[index]:-1} == 0 ]]; then style=9 fade=60;
     elif (( index == selected )); then style=1 char='●'; fi
     if [[ ${stars_text_char[$cell]-} != "$char" || ${stars_text_style[$cell]-} != "$style" || ${stars_text_fade[$cell]-} != "$fade" ]]; then

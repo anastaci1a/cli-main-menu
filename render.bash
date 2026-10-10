@@ -296,9 +296,7 @@ function ez_menu_draw() {
         printf '\r'
         ez_stars_render_span "$(( ${#fitted_rows[@]} + 3 + index - first ))" 0 "$COLUMNS"
       else
-        marker_color=$C_PINK
-        (( ! ${menu_back_focused:-0} )) || marker_color=$C_DISABLED_NUMBER
-        printf '\r\033[2K%*s%s•%s' "$indent" '' "$marker_color" "$C_RESET"
+        printf '\r\033[2K%*s%s•%s' "$indent" '' "$C_DISABLED_NUMBER" "$C_RESET"
       fi
       printf '\r\n'
       if (( ${menu_has_back:-0} && index == first && indent > 0 )); then

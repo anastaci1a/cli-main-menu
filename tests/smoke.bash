@@ -2,7 +2,8 @@
 set -euo pipefail
 
 cli_dir=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-bashrc_path=${1:-"$cli_dir/../../.bashrc"}
+bashrc_path=${1:-"$cli_dir/bashrc.example"}
+unset CLI_MAIN_MENU_DIR
 bashrc_path=$(CDPATH='' cd -- "$(dirname -- "$bashrc_path")" && printf '%s/%s' "$PWD" "${bashrc_path##*/}")
 for module in "$cli_dir/"*.bash "$bashrc_path"; do bash -n "$module"; done
 

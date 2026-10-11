@@ -7,10 +7,12 @@ Its animated star field adapts to your terminal size.
 
 ## Get started
 
-Place this directory at `~/scripts/cli` and add this line to `~/.bashrc`:
+Place this directory anywhere persistent and add these lines to `~/.bashrc`
+(replace the path with your checkout):
 
 ```bash
-source -- "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/scripts/cli/init.bash" || return
+export CLI_MAIN_MENU_DIR="/path/to/cli-main-menu"
+source -- "$CLI_MAIN_MENU_DIR/init.bash"
 ```
 
 Then reload your shell and open the menu:
@@ -24,6 +26,26 @@ Sourcing the file only defines commands; it does not open the menu. Bash 4+,
 `date`, `stty`, and `clear` are required. Codex integration needs `tmux`, `jq`,
 and a current `codex-switcher` with enrolled accounts. Keep the same
 `CODEX_SWITCHER_HOME` in your shell and switcher service.
+
+### Unraid
+
+Keep the checkout at `/mnt/user/live/projects/cli-main-menu` and the switcher
+binary at `/mnt/user/live/packages/codex-switcher/bin/codex-switcher`. Run:
+
+```bash
+bash /mnt/user/live/projects/cli-main-menu/install-unraid.bash
+source ~/.bashrc
+startup
+```
+
+The installer saves its shell hooks and settings under `/boot/config/cli-main-menu`
+and adds a restore command to `/boot/config/go`. After each reboot, it restores
+`startup` and PATH, and starts the switcher supervisor when the array is ready.
+State is stored in `/mnt/user/appdata/codex-switcher`. Set `CODEX_SWITCHER_BIN`
+and `CODEX_SWITCHER_HOME` before installation to override those paths.
+Interactive login shells open the menu automatically; sourcing `.bashrc` only
+loads the alias. Nested tmux shells and non-interactive commands do not auto-open
+the menu. The original boot and shell files are backed up before installation.
 
 ## Use the menu
 
@@ -69,6 +91,7 @@ change the main menu.
 
 ```bash
 bash tests/smoke.bash
+bash tests/unraid.bash
 bash tests/backend.bash
 bash tests/watch.bash
 bash tests/switcher.bash

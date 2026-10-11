@@ -1,0 +1,12 @@
+# Copy this loading block into ~/.bashrc. Set CLI_MAIN_MENU_DIR for a custom path.
+_ez_cli_base=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+_ez_cli_dir=${CLI_MAIN_MENU_DIR:-}
+if [[ -z $_ez_cli_dir ]]; then
+  if [[ -r $_ez_cli_base/init.bash ]]; then
+    _ez_cli_dir=$_ez_cli_base
+  else
+    _ez_cli_dir=$_ez_cli_base/scripts/cli
+  fi
+fi
+source -- "$_ez_cli_dir/init.bash"
+unset _ez_cli_base _ez_cli_dir

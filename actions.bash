@@ -5,6 +5,18 @@ function ez_menu_terminal() {
   printf '  %sReady when you are.%s\n\n' "$C_GREEN" "$C_RESET"
 }
 
+function ez_menu_herdr() {
+  local executable=${HERDR_BIN:-herdr} result
+  command -v "$executable" >/dev/null 2>&1 || {
+    printf 'Herdr is not installed or is missing from PATH.\n' >&2
+    return 1
+  }
+  if (( ${ez_menu_shared_screen:-0} )); then printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2; fi
+  if "$executable"; then result=0; else result=$?; fi
+  if (( ${ez_menu_shared_screen:-0} )); then printf '\033[?1049h\033[?25l' >&2; fi
+  return "$result"
+}
+
 function ez_menu_codex_monitor_available() {
   command -v codex-switcher >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1
 }

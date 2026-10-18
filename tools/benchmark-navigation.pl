@@ -88,7 +88,7 @@ printf "initial_home_ms=%.1f\n",1000*(time-$started);
 # Let the old two-second snapshot window expire, as when browsing the home menu.
 my $idle_until=time+3.2;
 while (time<$idle_until) { pump() }
-syswrite($pty,"\e[B\e[B");
+syswrite($pty,"\e[B\e[B\e[B");
 $output=''; expect(qr/\e\[1mCodex:.*\e\[1mSessions/s);
 transition('sessions',"\n",qr/Alpha.*Session Manager/s);
 transition('sessions_to_home',"\e",qr/New Terminal/);

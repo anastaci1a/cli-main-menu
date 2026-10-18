@@ -45,6 +45,7 @@ EZ_MENU_STAR_HUE_SPREAD=60
 COLUMNS=80
 LINES=24
 clear() { :; }
+herdr() { printf 'HERDR_ATTACHED\n'; }
 tmux() {
   case $1 in
     list-panes) printf '%%0|100\n%%1|100\n' ;;

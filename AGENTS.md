@@ -18,6 +18,9 @@ contains text/path input widgets.
 - Define options in `menu.bash`, without hard-coded counts elsewhere. Keep the
   centered, left-aligned option block; one ○/● marker column; disabled styling
   and indivisible notes; responsive hints; and numbered non-TTY selection.
+- Keep Herdr as the second home option. It opens its own UI and returns to the
+  same selection on detach. Preserve its persistent Unraid PATH/configuration
+  hooks; restoring boot hooks and sourcing shell files must not start Herdr.
 - Run actions in the calling shell so `fg` sees its jobs. Isolate only the
   selector. Skip disabled choices in both directions and reject them in the
   numeric fallback. Separator rows use a non-selectable `•` in the marker column,

@@ -15,6 +15,8 @@ printf '# Original login configuration\n' > "$fixture/root/.bash_profile"
   printf 'CLI_MAIN_MENU_DIR=%q\n' "$fixture/menu with spaces"
   printf 'CODEX_SWITCHER_BIN=%q\n' "$fixture/bin with spaces"
   printf 'CODEX_SWITCHER_HOME=%q\n' "$fixture/appdata/codex-switcher"
+  printf 'HERDR_BIN_DIR=%q\n' "$fixture/herdr bin"
+  printf 'HERDR_DATA_DIR=%q\n' "$fixture/appdata/herdr"
 } > "$fixture/boot/config/cli-main-menu/settings.sh"
 bash "$fixture/boot/config/cli-main-menu/restore.sh"
 bash "$fixture/boot/config/cli-main-menu/restore.sh"
@@ -30,6 +32,10 @@ source "$fixture/root/.bashrc"
 declare -F original_function ez_select >/dev/null || exit 1
 [[ $(alias startup) == "alias startup='clear && ez_select'" ]] || exit 1
 [[ $CODEX_SWITCHER_HOME == "$fixture/appdata/codex-switcher" ]] || exit 1
+[[ $HERDR_CONFIG_PATH == "$fixture/appdata/herdr/config.toml" ]] || exit 1
+[[ $(readlink "$fixture/root/.config/herdr") == "$fixture/appdata/herdr" ]] || exit 1
+[[ $PATH == *":$fixture/herdr bin:"* ]] || exit 1
+[[ $PATH != *"$fixture/herdr bin:"*"$fixture/herdr bin:"* ]] || exit 1
 [[ $PATH == "$fixture/bin with spaces:"* ]] || exit 1
 [[ $PATH != *"$fixture/bin with spaces:"*"$fixture/bin with spaces:"* ]] || exit 1
 ez_select() { echo 'Unexpected UI launch' >&2; return 99; }

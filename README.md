@@ -62,6 +62,12 @@ or from any row at the filesystem root. From the second row onward it otherwise
 always opens the parent.
 
 - **New Terminal** returns to your shell. Selecting **Exit** closes that shell.
+- **Herdr**, the second option, opens the Herdr UI and returns here when you
+  detach with Ctrl+B, then Q. Its binary is installed at
+  `/mnt/user/live/packages/herdr/bin/herdr`; configuration and saved state live
+  under `/mnt/user/appdata/herdr`. The Unraid boot hook restores PATH and the
+  `~/.config/herdr` link after reboot. Reopen the menu after `source ~/.bashrc`
+  to load changes. On other systems, install `herdr` on PATH or set `HERDR_BIN`.
 - **Codex: New Session** appears when no sessions exist and asks for a unique
   name, starting directory, and account. The directory picker starts at your current
   directory, lets you browse or type a path, and can create a new directory.

@@ -43,8 +43,8 @@ for entry in "${menu_items[@]}"; do
 done
 menu_layout_labels=("${labels[@]}")
 original_labels=("${labels[@]}")
-menu_accent_suffix=([1]=' (cli-main-menu)')
-menu_layout_labels[1]='Codex: Resume'
+menu_accent_suffix=([2]=' (cli-main-menu)')
+menu_layout_labels[2]='Codex: Resume'
 visible=${#labels[@]}
 enabled_count=0
 for enabled in "${menu_enabled[@]}"; do enabled_count=$((enabled_count + enabled)); done
@@ -59,7 +59,7 @@ declare -A stars_text_flash stars_occluded
 declare -A stars_hue_offset stars_cell_render stars_text_palette
 ez_stars_init
 ez_stars_layout "${#fitted_rows[@]}" 5 "${#title_rows[0]}" 2 "${#labels[@]}" 0 "${menu_layout_labels[@]}"
-ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 0 1 "${labels[@]}"
+ez_stars_text_layout "${#fitted_rows[@]}" "${#title_rows[0]}" 2 0 0 2 "${labels[@]}"
 ez_stars_build_work
 # Keep the sample status date fixed so regenerating on another day is stable.
 status_date='Mon Jan 01'
@@ -76,7 +76,7 @@ for ((elapsed = 0; elapsed <= 10000; elapsed += 50)); do
       ez_stars_render_span "$screen_row" 0 "$COLUMNS"
       printf '\r\n'
     done
-    ez_menu_draw 1 0 "$visible" "${labels[@]}"
+    ez_menu_draw 2 0 "$visible" "${labels[@]}"
     printf '\r\033[J'
   )
   printf '%s\0' "$frame"

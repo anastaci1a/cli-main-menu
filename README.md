@@ -62,7 +62,7 @@ or from any row at the filesystem root. From the second row onward it otherwise
 always opens the parent.
 
 - **New Terminal** returns to your shell. Selecting **Exit** closes that shell.
-- **Herdr**, the second option, opens the Herdr UI and returns here when you
+- **Herdr Dashboard**, the second option, opens the Herdr UI and returns here when you
   detach with Ctrl+B, then Q. Its binary is installed at
   `/mnt/user/live/packages/herdr/bin/herdr`; configuration and saved state live
   under `/mnt/user/appdata/herdr`. The Unraid boot hook restores PATH and the

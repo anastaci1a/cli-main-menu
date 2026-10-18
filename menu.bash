@@ -4,7 +4,7 @@
 function ez_menu_define_items() {
   # Uses the caller's menu_items array so the preview can render these same rows.
   local sessions_label='Codex: Sessions'
-  menu_items=('New Terminal|ez_menu_terminal|close' 'Herdr|ez_menu_herdr|stay')
+  menu_items=('New Terminal|ez_menu_terminal|close' 'Herdr Dashboard|ez_menu_herdr|stay')
   if ez_menu_has_codex; then
     [[ -z ${ez_switcher_error:-} ]] || sessions_label+=' (disconnected)'
     menu_items+=("$(ez_menu_codex_label)|ez_menu_codex|stay" "$sessions_label|ez_menu_codex_sessions|stay")

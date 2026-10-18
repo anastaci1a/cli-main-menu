@@ -872,3 +872,33 @@ printf 'PASS bounded adaptive color preparation, including a nearly expired idle
   [[ ${stars_text_fade[$separator_cell]} == 60 && ${stars_text_seen[$separator_cell]%:*:*} == "${stars_text_seen[$account_cell]%:*:*}" ]]
 )
 printf 'PASS home arrow preserves title centering and separator bullets stay at dim account brightness\n'
+
+(
+  COLUMNS=80 LINES=24 visible=3 menu_has_back=1 menu_back_focused=0
+  title_rows=(TITLE) hint_rows=(Controls) menu_enabled=(1 1 1) menu_spacers=()
+  original_labels=('One [work]' 'Two [personal]' Three)
+  menu_layout_labels=("${original_labels[@]}") menu_accent_suffix=([0]=' [work]' [1]=' [personal]')
+  read -r marker_width label_width option_block_width option_left option_right < <(ez_menu_option_layout "${original_labels[@]}")
+  capture_selection() (
+    RANDOM=7291
+    ez_stars_init
+    ez_stars_layout 6 1 5 2 3 0 "${original_labels[@]}"
+    ez_stars_text_layout 6 5 2 0 0 0 "${original_labels[@]}"
+    ez_stars_build_work
+    ez_stars_tick 3900
+    selected=0
+    for instant in 4000 4200 4400 4750 5000 5600; do
+      selected=$(((selected+1)%3))
+      if [[ $1 == incremental ]]; then ez_stars_select 0 "$selected" 6
+      else
+        ez_stars_text_layout 6 5 2 0 0 "$selected" "${original_labels[@]}"
+        ez_stars_build_work
+      fi
+      ez_stars_tick "$instant"
+      for ((row=stars_top;row<=stars_bottom;row++)); do ez_stars_render_span "$row" 0 "$COLUMNS"; done
+    done
+    printf 'random=%s' "$RANDOM"
+  )
+  [[ $(capture_selection incremental) == "$(capture_selection rebuild)" ]]
+)
+printf 'PASS incremental accented selection matches rebuilt shimmer cells and random state\n'

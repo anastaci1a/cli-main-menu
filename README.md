@@ -54,6 +54,13 @@ Use Up/Down to choose an option and Enter or Space to select it. Left focuses
 Right returns to the options. Esc goes back or leaves the home menu for your
 shell. Text fields use Left/Right to move the cursor.
 
+In the directory picker, Left opens the parent and highlights the directory you
+just left. Right or Tab opens a child and restores the selection from your last
+visit; an unvisited directory keeps the row position where possible. This history
+lasts for the current picker only. Left focuses Back from the first action row,
+or from any row at the filesystem root. From the second row onward it otherwise
+always opens the parent.
+
 - **New Terminal** returns to your shell. Selecting **Exit** closes that shell.
 - **Codex: New Session** appears when no sessions exist and asks for a unique
   name, starting directory, and account. The directory picker starts at your current
@@ -98,12 +105,18 @@ bash tests/switcher.bash
 bash tests/session_focus.bash
 bash tests/launch.bash
 bash tests/stars.bash
+bash tests/selection.bash
 perl tests/terminal.pl
 ```
 
 Tests use fake or isolated sessions and do not operate on your live Codex
 sessions. The terminal suite needs Perl `IO::Pty`. Contributor rules and renderer
 benchmark commands are in [AGENTS.md](AGENTS.md).
+
+`perl tools/benchmark-selection.pl [CHECKOUT]` measures arrow-key latency and
+output volume with animated, accented options and no backend. Set `BENCH_COLS`
+and `BENCH_ROWS` to test different terminal sizes. The selection frame comparison
+uses Node.js to check colors, glyphs, bolding, and strikethrough against full repairs.
 
 The backend contract is documented in Codex Switcher's
 `docs/CLI_MAIN_MENU_INTEGRATION.md`. The menu uses `sessions --all` and

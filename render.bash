@@ -291,6 +291,10 @@ function ez_menu_draw() {
     read -r marker_width label_width option_block_width indent right_width < <(ez_menu_option_layout "$@")
   fi
   for ((index = first; index < first + visible; index++)); do
+    if (( ${#ez_menu_damage_rows[@]} )); then
+      [[ $index == "${ez_menu_damage_rows[0]}" || $index == "${ez_menu_damage_rows[1]}" ]] || continue
+      printf '\033[%d;1H' "$(( ${#fitted_rows[@]} + 3 + index - first ))"
+    fi
     if [[ ${menu_spacers[index]:-0} == 1 ]]; then
       if (( ${ez_stars_animated:-0} )); then
         printf '\r'
@@ -369,6 +373,7 @@ function ez_menu_draw() {
       ez_menu_back_control "$screen_row" "$indent"
     fi
   done
+  (( ${#ez_menu_damage_rows[@]} == 0 )) || return 0
   if (( ${ez_stars_animated:-0} )); then
     screen_row=$(( ${#fitted_rows[@]} + visible + 3 ))
     printf '\r'

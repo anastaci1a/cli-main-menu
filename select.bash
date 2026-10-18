@@ -12,6 +12,8 @@ function ez_menu_choose() (
   local disabled_indices='' enabled_count=0 direction attempts label_color weight number_color note note_text
   local read_status last_tick=-1 redraw=1 layout_dirty=1
   local full_redraw=1 option_frame=0 text_cache_key='' new_text_key
+  local navigation_redraw=0 painted_selected=-1 painted_first=-1 painted_back=-1 sparse_options=0
+  local -a ez_menu_damage_rows=()
   local last_repair=$SECONDS
   local status_line='' status_output='' status_seen='' status_token elapsed
   local header_line='' header_output='' header_seen='' header_token
@@ -42,7 +44,7 @@ function ez_menu_choose() (
   local stars_horizon_delay stars_horizon_next
   local stars_geometry_key
   local -a stars_flash stars_arrival_cell stars_settled stars_text_settled
-  local -a stars_star_band stars_text_band stars_text_dirty
+  local -a stars_star_band stars_text_band stars_text_dirty stars_text_option_cells
   local stars_work_ready stars_work_dirty stars_last_elapsed stars_last_phase
   local -a stars_color_pair stars_prefetch_cells
   local stars_prefetch_cycle stars_prefetch_cursor stars_prefetch_budget
@@ -199,7 +201,7 @@ function ez_menu_choose() (
   else title_rows=() title_width=0; fi
   (( selected >= count )) && selected=0
   while :; do
-    frame='' status_output='' spinner_output='' option_frame=0 changed_durations=()
+    frame='' status_output='' spinner_output='' option_frame=0 changed_durations=() sparse_options=0
     if [[ -n $refresh_function ]] && { (( SECONDS >= refresh_at )) ||
         { [[ -n $watch_fd && $watch_failed == 0 ]] && IFS= read -r -t 0 -u "$watch_fd"; }; }; then
       ez_menu_refresh_view
@@ -242,7 +244,11 @@ function ez_menu_choose() (
         esac
       done
       # Read the real terminal size: phone keyboards/app switching can change it.
-      term_size=$(stty size <&2 2>/dev/null) || term_size=''
+      # Navigation does not change terminal geometry. Poll on clock ticks as
+      # a fallback for terminals that miss WINCH, and immediately on repairs.
+      if (( layout_dirty || SECONDS != last_tick )); then
+        term_size=$(stty size <&2 2>/dev/null) || term_size=''
+      fi
       read -r term_lines term_columns <<< "$term_size"
       if [[ $term_lines =~ ^[1-9][0-9]*$ && $term_columns =~ ^[1-9][0-9]*$ ]]; then
         if (( LINES != term_lines || COLUMNS != term_columns )); then
@@ -357,8 +363,12 @@ function ez_menu_choose() (
       (( selected >= first + visible )) && first=$((selected - visible + 1))
       if (( ez_stars_animated )); then
         new_text_key="$new_star_key:$first:$selected:$menu_back_focused"
+        if (( navigation_redraw && ! full_redraw && painted_first == first && painted_back == menu_back_focused && ! menu_back_focused && ${#duration_created[@]} == 0 )) &&
+           [[ ${text_cache_key%:*:*} == "$new_star_key:$first" ]]; then
+          sparse_options=1
+        fi
         if [[ $new_text_key != "$text_cache_key" ]]; then
-          if [[ ${text_cache_key%:*:*} == "$new_star_key:$first" ]] && (( ${#menu_accent_suffix[@]} == 0 )); then
+          if [[ ${text_cache_key%:*:*} == "$new_star_key:$first" && ${text_cache_key##*:} == "$menu_back_focused" ]] && (( ! menu_back_focused )); then
             ez_stars_select "$first" "$selected" "${#fitted_rows[@]}"
           else
             ez_stars_text_layout "${#fitted_rows[@]}" "$actual_title_width" "$star_margin" "$compact" "$first" "$selected" "$@"
@@ -366,7 +376,7 @@ function ez_menu_choose() (
           fi
           text_cache_key=$new_text_key
         fi
-        status_line=$(ez_menu_status_text)
+        if (( SECONDS != last_tick || full_redraw )); then status_line=$(ez_menu_status_text); fi
         (( redraw )) && option_frame=1
       else
         # Static/submenu rendering keeps the original terminal fallback.
@@ -387,7 +397,7 @@ function ez_menu_choose() (
       elapsed=$((stars_now - stars_origin))
       stars_emit_limit=-1
       if (( full_redraw )); then stars_emit_limit=0;
-      elif (( option_frame )); then stars_emit_limit=$(( (${#fitted_rows[@]} + 2) * COLUMNS )); fi
+      elif (( option_frame && ! sparse_options )); then stars_emit_limit=$(( (${#fitted_rows[@]} + 2) * COLUMNS )); fi
       ez_stars_tick "$elapsed" "$stars_emit_limit"
       ez_stars_bar_color "$elapsed"
       status_token="$stars_bar_bg:$status_line"
@@ -425,6 +435,7 @@ function ez_menu_choose() (
         status_output='' header_output='' stars_output='' full_redraw=0 last_repair=$SECONDS
       elif (( option_frame )); then
         frame=$(
+          if (( sparse_options )); then ez_menu_damage_rows=("$painted_selected" "$selected"); fi
           ez_stars_prepare_repair "$(( (${#fitted_rows[@]} + 2) * COLUMNS ))"
           printf '\033[%d;1H' "$(( ${#fitted_rows[@]} + 3 ))"
           ez_menu_draw "$selected" "$first" "$visible" "$@"
@@ -489,6 +500,7 @@ function ez_menu_choose() (
     fi
     # Emit timestamp repairs and their spinner overlay together.
     printf '%s%s%s%s%s%s%s' "$status_output" "$header_output" "$frame" "${stars_output:-}" "${duration_output:-}" "$description_output" "$spinner_output" >&2
+    painted_selected=$selected painted_first=$first painted_back=$menu_back_focused navigation_redraw=0
     # An opt-out from animation must not delay the first discovery snapshot.
     if (( ! ez_stars_animated )) && [[ -n $watch_fd && $watch_failed == 0 ]]; then input_timeout=0.1; fi
     if ez_menu_read_character "$input_timeout" key; then
@@ -533,7 +545,7 @@ function ez_menu_choose() (
         ;;
       *) continue ;;
     esac
-    redraw=1
+    redraw=1 navigation_redraw=1
   done
   return 130
 )

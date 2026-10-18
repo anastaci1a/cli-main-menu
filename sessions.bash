@@ -113,6 +113,8 @@ ez_codex_field() (
   local kind=$1 input=$2 except=${3-} key seq state valid resolved creatable create_target create_parent path_input base prefix path search_base cursor=${#2} parent
   local selected=0 first=0 rows cols size i display dirty=1 layout_dirty=1 frame_dirty=1 direction attempts candidate found
   local menu_has_back=0 menu_back_focused=0 last_back_focus=0 answer
+  local directory_selection='' directory_previous directory_target
+  local -A directory_history=()
   local count visible available_rows marker_width label_width option_block_width option_left option_right read_status old_first geometry_changed option_frame
   local frame banner new_geometry geometry='' elapsed status_line='' status_seen='' status_token status_output='' last_tick=-1
   local header_line='' header_seen='' header_token header_output=''
@@ -133,7 +135,7 @@ ez_codex_field() (
   local COLUMNS=${COLUMNS:-80} LINES=${LINES:-24}
   local -a choices=() labels=() fitted_rows=() hint_rows=() title_rows=() menu_enabled=() menu_disabled_notes=()
   local -a stars_rotation stars_flash stars_arrival_cell stars_settled stars_text_settled
-  local -a stars_star_band stars_text_band stars_text_dirty stars_color_pair stars_prefetch_cells
+  local -a stars_star_band stars_text_band stars_text_dirty stars_text_option_cells stars_color_pair stars_prefetch_cells
   local -a stars_peak stars_replenish stars_replace_queue stars_star_dirty stars_band_member stars_replacement_birth
   local -a stars_twinkle_curve stars_twinkle_glyph stars_replacement_curve stars_baseline_blocked stars_clear_pending
   local -a stars_cells stars_fade stars_density stars_hue stars_sat stars_value stars_sweep_arrival stars_repair_cells
@@ -213,6 +215,17 @@ ez_codex_field() (
             [[ -d $path && -x $path ]] && choices+=("${path%/}")
           done
         fi
+        # Restore by path, not by the old list offset: sorting and directory
+        # contents can change between visits. Action rows use an explicit tag.
+        if [[ $directory_selection == @* ]]; then
+          selected=${directory_selection#@}
+          (( selected < ${#choices[@]} + 2 )) || selected=$((${#choices[@]} + 1))
+        elif [[ -n $directory_selection ]]; then
+          for i in "${!choices[@]}"; do
+            if [[ ${choices[i]} == "$directory_selection" ]]; then selected=$((i+2)); break; fi
+          done
+        fi
+        directory_selection=''
       fi
       dirty=0
     fi
@@ -377,20 +390,27 @@ ez_codex_field() (
                  (( cursor < ${#input} )) && cursor=$((cursor+1))
                elif (( ${#choices[@]} )); then
                  (( selected<2 )) && selected=2
-                 input=$(ez_codex_resolve_dir "${choices[selected-2]}") || continue
+                 directory_target=$(ez_codex_resolve_dir "${choices[selected-2]}") || continue
+                 [[ -z $base ]] || directory_history[$base]=${choices[selected-2]}
+                 directory_selection=${directory_history[$directory_target]-@$selected}
+                 input=$directory_target
                  cursor=${#input} dirty=1
                fi;;
             D) if [[ $kind == 'Session name' || $kind == 'New directory name' || $kind == 'Move directory name' ]]; then
                  (( cursor > 0 )) && cursor=$((cursor-1))
                elif (( menu_back_focused )); then
                  frame=selection
-               elif (( selected < 2 )); then
+               elif (( selected == 0 )) || [[ $resolved == / ]]; then
                  menu_back_focused=1; frame=selection
                else
-                 parent=${resolved:-$base}
-                 [[ -n $parent ]] || parent=/
+                 directory_previous=${resolved:-$base}
+                 [[ -n $directory_previous ]] || directory_previous=/
+                 directory_history[$directory_previous]=@$selected
+                 if (( selected >= 2 )); then directory_history[$directory_previous]=${choices[selected-2]}; fi
+                 parent=$directory_previous
                  [[ $parent == / ]] || parent=${parent%/*}
                  [[ -n $parent ]] || parent=/
+                 directory_selection=$directory_previous
                  input=$parent cursor=${#input} dirty=1
                fi;;
           esac
@@ -429,7 +449,14 @@ ez_codex_field() (
           else continue; fi
           return
         fi;;
-      $'\t') if [[ $kind == 'Start directory' ]] && (( ${#choices[@]} )); then menu_back_focused=0; (( selected<2 )) && selected=2; input=$(ez_codex_resolve_dir "${choices[selected-2]}") || continue; cursor=${#input} dirty=1; fi;;
+      $'\t') if [[ $kind == 'Start directory' ]] && (( ${#choices[@]} )); then
+        menu_back_focused=0
+        (( selected<2 )) && selected=2
+        directory_target=$(ez_codex_resolve_dir "${choices[selected-2]}") || continue
+        [[ -z $base ]] || directory_history[$base]=${choices[selected-2]}
+        directory_selection=${directory_history[$directory_target]-@$selected}
+        input=$directory_target cursor=${#directory_target} dirty=1
+      fi;;
       $'\177'|$'\b') if (( cursor > 0 )); then menu_back_focused=0; input=${input:0:cursor-1}${input:cursor}; cursor=$((cursor-1)); dirty=1; fi;;
       $'\025') menu_back_focused=0 input='' cursor=0 dirty=1;;
       $'\004') return 130;;

@@ -326,6 +326,7 @@ function ez_stars_text_layout() {
     unset 'stars_color_pair[cell]'
   done
   stars_text_char=() stars_text_style=() stars_text_fade=() stars_text_palette=() stars_text_flash=()
+  stars_text_option_cells=()
   # Plain explanatory text is painted by the chooser, never covered by stars.
   for ((line=0;line<${#description_rows[@]};line++)); do
     row=$((4+line))
@@ -409,6 +410,7 @@ function ez_stars_text_layout() {
         stars_text_fade[$cell]=$(( index == selected && ! ${menu_back_focused:-0} ? 100 : 60 ))
         stars_text_palette[$cell]=3
         stars_text_flash[$cell]=1
+        stars_text_option_cells[index]+=" $cell"
       done
     fi
   done
@@ -490,7 +492,7 @@ function ez_stars_build_work() {
 
 # Arrow movement changes marker weight/glyph, not the field or its text mask.
 function ez_stars_select() {
-  local first=$1 selected=$2 banner_count=$3 index cell style fade char
+  local first=$1 selected=$2 banner_count=$3 index cell style fade char IFS=$' \t\n'
   for ((index = first; index < first + visible; index++)); do
     cell=$(((banner_count + 2 + index - first) * COLUMNS + option_left))
     style=0 fade=100 char='○'
@@ -502,6 +504,15 @@ function ez_stars_select() {
       unset 'stars_text_seen[$cell]' 'stars_text_settled[cell]'
       stars_text_dirty[cell]=1
     fi
+    fade=60
+    (( index == selected )) && fade=100
+    for cell in ${stars_text_option_cells[index]-}; do
+      if [[ ${stars_text_fade[$cell]} != "$fade" ]]; then
+        stars_text_fade[$cell]=$fade
+        unset 'stars_text_seen[$cell]' 'stars_text_settled[$cell]'
+        stars_text_dirty[cell]=1
+      fi
+    done
   done
 }
 

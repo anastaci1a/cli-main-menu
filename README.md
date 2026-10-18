@@ -118,6 +118,16 @@ output volume with animated, accented options and no backend. Set `BENCH_COLS`
 and `BENCH_ROWS` to test different terminal sizes. The selection frame comparison
 uses Node.js to check colors, glyphs, bolding, and strikethrough against full repairs.
 
+To diagnose a slow session opening with Bash 5+, set
+`export EZ_MENU_OPEN_TIMING_FILE=/tmp/satellite-open-times.tsv` before `startup`.
+The log contains stage, microseconds, and exit status for watcher shutdown,
+Switcher's `open` command, response validation/extraction, and tmux preparation.
+It contains no session names, IDs, or response data. Use
+`unset EZ_MENU_OPEN_TIMING_FILE` to stop logging. The tmux preparation measurement
+ends before the interactive attach and does not measure Codex's first screen.
+`bash tools/benchmark-open.bash [CHECKOUT]` measures the installed Switcher with a disposable
+fake-Codex session and isolated tmux socket/home; it never opens a user session.
+
 The backend contract is documented in Codex Switcher's
 `docs/CLI_MAIN_MENU_INTEGRATION.md`. The menu uses `sessions --all` and
 `sessions --all --watch` for inventory, `status --json` for account choices,

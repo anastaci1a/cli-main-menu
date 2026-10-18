@@ -158,15 +158,21 @@ ez_menu_codex_label() {
 }
 
 ez_codex_attach() {
-  local target=$1 pane=${2-} result now
+  local target=$1 pane=${2-} result now timing=''
+  if [[ -n ${EZ_MENU_OPEN_TIMING_FILE:-} ]]; then timing=${EPOCHREALTIME:-}; timing=${timing/./}; fi
   tmux has-session -t "$target" 2>/dev/null || { ez_codex_error 'Session is no longer available.'; return 1; }
   printf -v now '%(%s)T' -1
   # set-option parses a window target, unlike has-session/attach-session.
   # The colon makes an exact session-name target resolve in that parser too.
-  tmux set-option -t "$target:" @ez_codex_last_used "$now" || return
   if [[ -n $pane ]]; then
-    tmux select-window -t "$pane" && tmux select-pane -t "$pane" || return
+    # One tmux command queue preserves failure ordering and avoids two client
+    # startups between the backend reply and the visible attachment.
+    tmux set-option -t "$target:" @ez_codex_last_used "$now" \; \
+      select-window -t "$pane" \; select-pane -t "$pane" || return
+  else
+    tmux set-option -t "$target:" @ez_codex_last_used "$now" || return
   fi
+  ez_switcher_timing tmux_preparation "$timing"
   if [[ -n ${TMUX:-} ]]; then tmux switch-client -t "$target"; return; fi
   (( ${ez_menu_shared_screen:-0} )) && printf '\033[?1004l\033[0m\033[?25h\033[?1049l' >&2
   tmux attach-session -t "$target"
@@ -255,10 +261,13 @@ ez_codex_open_id() {
     (.session.thread_id == null or (.session.thread_id | type == "string")) and
     (.session.tmux_session | type == "string" and length > 0))' \
     open --session "$1" || { ez_codex_error; return 1; }
+  local timing=''
+  if [[ -n ${EZ_MENU_OPEN_TIMING_FILE:-} ]]; then timing=${EPOCHREALTIME:-}; timing=${timing/./}; fi
   local -a opened
   mapfile -d '' -t opened < <(jq -jr '.session | [(.id // ("pane:"+.pane)), (.thread_id // ""), .tmux_session, .pane] | .[] | .+"\u0000"' <<< "$ez_switcher_json")
   ez_codex_opened_id=${opened[0]} ez_codex_opened_thread=${opened[1]}
   ez_codex_snapshot_at=-100
+  ez_switcher_timing response_extract "$timing"
   ez_codex_attach "=${opened[2]}" "${opened[3]}"
 }
 

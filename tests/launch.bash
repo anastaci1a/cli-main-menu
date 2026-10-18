@@ -102,3 +102,7 @@ for target in '=codex-project with spaces' "$named_id"; do
   done
 done
 printf 'PASS real tmux attachment preparation for exact names, spaces, IDs and selected panes\n'
+rm -f -- "$test_root/attachment"
+if ez_codex_attach "$named_id" '%99999999' 2>/dev/null; then exit 1; fi
+[[ ! -e $test_root/attachment ]]
+printf 'PASS failed command in the tmux preparation queue prevents attachment\n'

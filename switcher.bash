@@ -1,27 +1,41 @@
 #!/usr/bin/env bash
 # JSON boundary to Codex Switcher. Never inspect account homes or conversation files.
 
+# Opt-in timings contain stage/duration/status only, never session IDs or JSON.
+ez_switcher_timing() {
+  [[ -n ${EZ_MENU_OPEN_TIMING_FILE:-} && -n ${2:-} ]] || return 0
+  local finish=${EPOCHREALTIME:-}
+  [[ -n $finish ]] || return 0
+  finish=${finish/./}
+  printf '%s\t%d\t%d\n' "$1" "$((10#$finish-10#$2))" "${3:-0}" 2>/dev/null >> "$EZ_MENU_OPEN_TIMING_FILE" || :
+}
+
 ez_switcher_available() {
   command -v codex-switcher >/dev/null 2>&1 && command -v jq >/dev/null 2>&1
 }
 
 ez_switcher_request() {
-  local filter=$1 output errors status
+  local filter=$1 output errors status timing=''
   shift
   ez_switcher_json='' ez_switcher_error=''
   ez_switcher_available || { ez_switcher_error='Codex Switcher and jq are required.'; return 1; }
   errors=$(mktemp) || return 1
+  if [[ $1 == open && -n ${EZ_MENU_OPEN_TIMING_FILE:-} ]]; then timing=${EPOCHREALTIME:-}; timing=${timing/./}; fi
   if output=$(codex-switcher "$@" 2>"$errors"); then status=0; else status=$?; fi
+  ez_switcher_timing switcher_open "$timing" "$status"
   ez_switcher_error=$(< "$errors")
   rm -f -- "$errors"
   if (( status )); then
     [[ -n $ez_switcher_error ]] || ez_switcher_error="Codex Switcher $1 failed (status $status)."
     return 1
   fi
+  if [[ -n $timing ]]; then timing=${EPOCHREALTIME:-}; timing=${timing/./}; fi
   if ! ez_switcher_json=$(jq -ces "if length == 1 then .[0] | $filter else error(\"expected one JSON result\") end" <<< "$output" 2>/dev/null); then
+    ez_switcher_timing response_validation "$timing" 1
     ez_switcher_error="Codex Switcher $1 returned an invalid response."
     return 1
   fi
+  ez_switcher_timing response_validation "$timing"
   ez_switcher_error=''
 }
 
@@ -57,6 +71,8 @@ ez_switcher_watch_start() {
 }
 
 ez_switcher_watch_close() {
+  local timing=''
+  if [[ -n ${EZ_MENU_OPEN_TIMING_FILE:-} ]]; then timing=${EPOCHREALTIME:-}; timing=${timing/./}; fi
   if [[ -n ${watch_pid:-} ]]; then
     kill "$watch_pid" 2>/dev/null || :
     wait "$watch_pid" 2>/dev/null || :
@@ -64,6 +80,7 @@ ez_switcher_watch_close() {
   [[ -z ${watch_fd:-} ]] || exec {watch_fd}<&-
   [[ -z ${watch_errors:-} ]] || rm -f -- "$watch_errors"
   watch_pid='' watch_fd='' watch_errors=''
+  ez_switcher_timing watcher_shutdown "$timing"
 }
 
 # 0: a new complete snapshot; 1: no change; 2: disconnected/malformed.

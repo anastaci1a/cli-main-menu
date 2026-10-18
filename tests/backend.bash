@@ -33,3 +33,17 @@ for response in '{}' '{"schema_version":1,"session":{"pane":"bad","tmux_session"
   [[ ! -f $test_root/attached && -n $ez_switcher_error ]]
 done
 printf 'PASS backend schema, unknown activity, provenance, offline errors and invalid attachment targets\n'
+EZ_MENU_OPEN_TIMING_FILE=$test_root/open-timing.tsv
+response='{"schema_version":1,"session":{"id":"pane:%7","pane":"%7","tmux_session":"private-name","thread_id":"private-thread"}}'
+ez_codex_open_id 'pane:%7'
+[[ -f $test_root/attached ]]
+stages=0
+while IFS=$'\t' read -r stage duration result; do
+  [[ $stage == switcher_open || $stage == response_validation || $stage == response_extract ]]
+  [[ $duration =~ ^[0-9]+$ && $result == 0 ]]
+  stages=$((stages+1))
+done < "$EZ_MENU_OPEN_TIMING_FILE"
+(( stages == 3 ))
+EZ_MENU_OPEN_TIMING_FILE=$test_root/missing/timings
+ez_codex_open_id 'pane:%7'
+printf 'PASS opt-in opening timings contain only stages/durations/status and cannot break opening\n'
